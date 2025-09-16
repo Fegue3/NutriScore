@@ -1,25 +1,98 @@
-# Flutter/Dart
+# ============================
+# Flutter / Dart
+# ============================
 .dart_tool/
 .packages
 .pub-cache/
 build/
-ios/Pods/
+**/build/
 **/GeneratedPluginRegistrant.*
 *.lock
 
-# IDE
-.vscode/
+# ============================
+# IDEs (IntelliJ / VS Code / Android Studio)
+# ============================
 .idea/
+.vscode/
 *.iml
 
-# Ambiente local
-.env
-.env.*
-lib/core/env.dart
+# ============================
+# Android
+# ============================
+android/.gradle/
+android/captures/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks
+*.iml
+
+# Gradle cache
+.gradle/
+**/gradle-wrapper.jar
+
+# ============================
+# iOS
+# ============================
+ios/
+ios/Flutter/.last_build_id
+ios/Pods/
+ios/Runner.xcworkspace/
+ios/Runner/GeneratedPluginRegistrant.*
+ios/build/
+
+# ============================
+# macOS
+# ============================
+macos/
+macos/Flutter/ephemeral/
+macos/Pods/
+macos/Runner.xcworkspace/
+macos/build/
+
+# ============================
+# Windows
+# ============================
+windows/
+windows/flutter/ephemeral/
+windows/build/
+
+# ============================
+# Linux
+# ============================
+linux/
+linux/flutter/ephemeral/
+linux/build/
+
+# ============================
+# Web
+# ============================
+web/
+web/.dart_tool/
+web/build/
+
+# ============================
+# Firebase / Google Services
+# ============================
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 
-# Artefactos
-*.ipa
-*.apk
-*.aab
+# ============================
+# Env / Config files
+# ============================
+.env
+.env.*
+lib/core/env.dart
+
+# ============================
+# Outros ficheiros temporários
+# ============================
+*.tmp
+*.swp
+*.log
+
+# ============================
+# Arquivos do sistema
+# ============================
+.DS_Store
+Thumbs.db
