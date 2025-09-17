@@ -154,6 +154,37 @@ create trigger trg_prefs_updated before update on public.preferences
 for each row execute function public.set_updated_at();
 ```
 
+### 4.2 `public.handle_new_user()`
+
+Função e trigger que criam automaticamente um **profile** e **preferences** quando um novo utilizador é registado em `auth.users`.
+
+```sql
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, full_name)
+  values (new.id, null)
+  on conflict do nothing;
+
+  insert into public.preferences (user_id)
+  values (new.id)
+  on conflict do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+```
+
+**Explicação:** isto garante que sempre que um utilizador novo é criado via Supabase Auth, automaticamente terá uma entrada em `profiles` e `preferences`, sem necessidade de lógica extra no cliente.
+
 ---
 
 ## 5) RLS — Row Level Security (Políticas)
@@ -235,7 +266,7 @@ create policy "history_crud_self" on public.product_history
 ## 6) Resumo
 
 1. **Autenticação**: via `auth.users`; FKs com *cascade delete*.
-2. **Perfis** e **preferências**: 1:1, `updated_at` via trigger.
+2. **Perfis** e **preferências**: 1:1, `updated_at` via trigger e criação automática ao registar.
 3. **Refeições**: logs por utilizador, macros validados.
 4. **Produtos**: cache local, fuzzy search (`pg_trgm`).
 5. **Histórico**: snapshots de scans com índice temporal.
