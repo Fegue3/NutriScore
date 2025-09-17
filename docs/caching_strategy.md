@@ -1,4 +1,4 @@
-# NutriTrack — Estratégia de Caching & Limites (Open Food Facts + Supabase)
+# NutriScore — Estratégia de Caching & Limites (Open Food Facts + Supabase)
 
 > Objetivo: reduzir chamadas à Open Food Facts (OFF) e consumo de espaço/IO no Supabase, garantindo UX rápida e estável.
 
