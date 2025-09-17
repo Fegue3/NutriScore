@@ -8,6 +8,7 @@ build/
 **/build/
 **/GeneratedPluginRegistrant.*
 *.lock
+.flutter-plugins-dependencies
 
 # ============================
 # IDEs (IntelliJ / VS Code / Android Studio)
