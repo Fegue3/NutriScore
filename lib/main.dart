@@ -1,3 +1,4 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'app/di.dart';
 import 'app/router/app_router.dart';
@@ -15,7 +16,7 @@ class NutriTrackApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'NutriTrack',
+      title: 'NutriScore',
       debugShowCheckedModeBanner: false,
       theme: NutriTheme.light,
       routerConfig: appRouter,

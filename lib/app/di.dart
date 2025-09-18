@@ -1,3 +1,4 @@
+// lib/app/di.dart
 import 'dart:async';
 
 class _AuthRepositoryFake {
@@ -11,6 +12,7 @@ class _AuthRepositoryFake {
 
 class _DI {
   late final _AuthRepositoryFake authRepository;
+
   Future<void> init() async {
     authRepository = _AuthRepositoryFake();
   }
