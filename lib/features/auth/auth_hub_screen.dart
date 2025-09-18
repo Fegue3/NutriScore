@@ -23,8 +23,8 @@ class AuthHubScreen extends StatelessWidget {
                   // Ícone do projeto
                   Image.asset(
                     'assets/utils/icon.png',
-                    width: 192,
-                    height: 192,
+                    width: 256,
+                    height: 256,
                   ),
                   const SizedBox(height: 12),
 
