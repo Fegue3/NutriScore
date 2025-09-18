@@ -28,9 +28,8 @@ final GoRouter appRouter = GoRouter(
     return null;
   },
   routes: [
-    GoRoute(path: '/login', builder: (_, __) => const SignInScreen(),),
-    GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen(),),
-
+    GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
+    GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
     ShellRoute(
       builder: (_, __, child) => AppShell(child: child),
       routes: [
