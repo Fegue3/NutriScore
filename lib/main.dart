@@ -4,6 +4,7 @@ import 'app/di.dart';
 import 'app/router/app_router.dart';
 import 'core/theme.dart';
 
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
