@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/auth_hub_screen.dart'; // <-- novo
 import '../../features/auth/sign_in_screen.dart';
 import '../../features/auth/sign_up_screen.dart';
 import '../../features/home/home_screen.dart';
@@ -16,18 +17,20 @@ class _AuthRefresh extends ChangeNotifier {
 }
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/dashboard',
+  initialLocation: '/', // <-- abre no hub
   refreshListenable: _AuthRefresh(),
   redirect: (context, state) {
     final logged = di.authRepository.isLoggedIn;
-    final isAuthRoute =
-        state.matchedLocation == '/login' || state.matchedLocation == '/signup';
+    final isAuthRoute = state.matchedLocation == '/login'
+        || state.matchedLocation == '/signup'
+        || state.matchedLocation == '/';
 
-    if (!logged && !isAuthRoute) return '/login';
-    if (logged && isAuthRoute) return '/dashboard';
+    if (!logged && !isAuthRoute) return '/';       // não logado → hub
+    if (logged && isAuthRoute) return '/dashboard';// logado → dashboard
     return null;
   },
   routes: [
+    GoRoute(path: '/', builder: (_, __) => const AuthHubScreen()), // <-- novo
     GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
     GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
     ShellRoute(
