@@ -3,14 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
+/// Bottom nav com:
+/// - Pill (sombra) a deslizar entre itens, com fade out quando chega.
+/// - Ícones 32px e label 12px FIXOS (sem zoom).
+/// - Fundo configurável (default #FFFFFFEE) e divisor superior opcional.
 class AppBottomNav extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onChanged;
+
+  // Destaque/estilo
+  final Color backgroundColor; // destaca vs app bg (#FAFAF7)
+  final bool showTopDivider;   // linha 1px no topo
+  final bool showIndicatorWhenIdle; // se true, mantém a pill visível parado
 
   const AppBottomNav({
     super.key,
     required this.currentIndex,
     required this.onChanged,
+    this.backgroundColor = const Color(0xEEFFFFFF),
+    this.showTopDivider = true,
+    this.showIndicatorWhenIdle = false,
   });
 
   @override
@@ -18,8 +30,14 @@ class AppBottomNav extends StatefulWidget {
 }
 
 class _AppBottomNavState extends State<AppBottomNav> {
-  static const _barHeight = 88.0;      // barra um pouco maior
-  static const _animMs = 280;          // animação mais lenta
+  // Layout / animações
+  static const double _barHeight = 88.0;   // barra um pouco maior
+  static const int _animMs = 280;          // velocidade do slide
+  static const double _pillH = 60.0;       // altura do "pill" (sombra)
+  static const double _pillHPad = 21.0;    // padding lateral dentro da célula
+  static const double _pillMinW = 86.0;    // limites para estabilidade
+  static const double _pillMaxW = 164.0;
+
   static const _items = <_NavSpec>[
     _NavSpec('Painel', Icons.dashboard_outlined, Icons.dashboard_rounded),
     _NavSpec('Diário', Icons.book_outlined, Icons.book_rounded),
@@ -30,15 +48,23 @@ class _AppBottomNavState extends State<AppBottomNav> {
   Timer? _fadeTimer;
 
   @override
+  void initState() {
+    super.initState();
+    _indicatorOpacity = widget.showIndicatorWhenIdle ? 1.0 : 0.0;
+  }
+
+  @override
   void didUpdateWidget(covariant AppBottomNav oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentIndex != widget.currentIndex) {
-      // mostra a sombra enquanto desliza, depois desvanece
+      // mostra a sombra enquanto desliza, depois desvanece (se configurado)
       _fadeTimer?.cancel();
       setState(() => _indicatorOpacity = 1.0);
-      _fadeTimer = Timer(const Duration(milliseconds: _animMs + 120), () {
-        if (mounted) setState(() => _indicatorOpacity = 0.0);
-      });
+      if (!widget.showIndicatorWhenIdle) {
+        _fadeTimer = Timer(Duration(milliseconds: _animMs + 120), () {
+          if (mounted) setState(() => _indicatorOpacity = 0.0);
+        });
+      }
     }
   }
 
@@ -58,28 +84,39 @@ class _AppBottomNavState extends State<AppBottomNav> {
           builder: (context, c) {
             final cellW = c.maxWidth / _items.length;
 
-            // dimensões do "pill" (sombra)
-            const pillH = 60.0;
-            final pillW = (cellW - 42).clamp(86.0, 164.0);
-            final pillTop = (_barHeight - pillH) / 2;
+            // dimensões da "pill" dinâmica
+            final pillW = (cellW - _pillHPad * 2)
+                .clamp(_pillMinW, _pillMaxW)
+                .toDouble();
+            final pillTop = (_barHeight - _pillH) / 2;
             final pillLeft =
                 cellW * widget.currentIndex + (cellW - pillW) / 2;
 
             return Stack(
               children: [
-                const Positioned.fill(
+                // fundo destacado
+                Positioned.fill(
                   child: DecoratedBox(
-                    decoration: BoxDecoration(color: Color(0xEEFFFFFF)),
+                    decoration: BoxDecoration(color: widget.backgroundColor),
                   ),
                 ),
-                // pill dinâmico a deslizar + fade-out quando chega
+                if (widget.showTopDivider)
+                  Positioned(
+                    top: 0, left: 0, right: 0,
+                    child: Container(
+                      height: 1,
+                      color: Colors.black.withOpacity(0.07),
+                    ),
+                  ),
+
+                // pill a deslizar + fade
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: _animMs),
                   curve: Curves.easeOutCubic,
                   top: pillTop,
                   left: pillLeft,
                   width: pillW,
-                  height: pillH,
+                  height: _pillH,
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOut,
@@ -92,6 +129,8 @@ class _AppBottomNavState extends State<AppBottomNav> {
                     ),
                   ),
                 ),
+
+                // items
                 Row(
                   children: List.generate(_items.length, (i) {
                     final spec = _items[i];
@@ -147,33 +186,28 @@ class _NavButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         splashFactory: NoSplash.splashFactory,
-        child: AnimatedScale(
-          scale: selected ? 1.12 : 1.0,       // anima ícone + label
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  selected ? selectedIcon : icon,
-                  size: 32,                    // ← ícones MAIORES
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? selectedIcon : icon,
+                size: 32, // FIXO
+                color: color,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: AppText.bodyFamily,
+                  fontSize: 12, // FIXO
+                  height: 1.2,
+                  fontWeight: FontWeight.w500,
                   color: color,
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: AppText.bodyFamily,
-                    fontSize: 12,
-                    height: 1.2,
-                    fontWeight: FontWeight.w500,
-                    color: color,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
