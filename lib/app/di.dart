@@ -1,21 +1,24 @@
-// lib/app/di.dart
-import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/env.dart';
+import '../data/repositories/auth_repository.dart';
 
-class _AuthRepositoryFake {
-  bool isLoggedIn = false;
-  final _ctrl = StreamController<void>.broadcast();
+class DI {
+  DI._();
+  static final DI I = DI._();
 
-  Stream<void> get authStateChanges => _ctrl.stream;
-  void signIn() { isLoggedIn = true; _ctrl.add(null); }
-  void signOut() { isLoggedIn = false; _ctrl.add(null); }
-}
-
-class _DI {
-  late final _AuthRepositoryFake authRepository;
+  late final SupabaseClient supabase;
+  late final AuthRepository authRepository;
 
   Future<void> init() async {
-    authRepository = _AuthRepositoryFake();
+    final supa = await Supabase.initialize(
+      url: Env.supabaseUrl,
+      anonKey: Env.supabaseAnonKey,
+    );
+    supabase = supa.client;
+
+    authRepository = AuthRepository(supabase);
   }
 }
 
-final di = _DI();
+// Exporta um atalho global
+final di = DI.I;
