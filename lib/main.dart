@@ -1,3 +1,4 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'core/theme.dart';
 import 'core/widgets/app_bottom_nav.dart';
@@ -5,7 +6,7 @@ import 'core/widgets/app_bottom_nav.dart';
 void main() => runApp(const NutriTrackApp());
 
 class NutriTrackApp extends StatelessWidget {
-  const NutriTrackApp({super.key});
+  const NutriTrackApp(); // sem key
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +20,7 @@ class NutriTrackApp extends StatelessWidget {
 }
 
 class _NavShell extends StatefulWidget {
-  const _NavShell({Key? key}) : super(key: key); // <- fixa o aviso
+  const _NavShell(); // sem key
 
   @override
   State<_NavShell> createState() => _NavShellState();
@@ -31,7 +32,7 @@ class _NavShellState extends State<_NavShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: const SizedBox.shrink(), // sem conteúdo — só a navbar
+      body: const SizedBox.shrink(),
       bottomNavigationBar: AppBottomNav(
         currentIndex: _index,
         onChanged: (i) => setState(() => _index = i),
