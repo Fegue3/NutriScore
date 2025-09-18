@@ -6,7 +6,7 @@ class AuthRepository {
 
   // Stream para o router ouvir e refrescar
   Stream<void> get authStateChanges =>
-      _client.auth.onAuthStateChange.map((_) => null);
+    _client.auth.onAuthStateChange.map((_) {});
 
   // Getter usado no redirect do GoRouter
   bool get isLoggedIn => _client.auth.currentSession != null;
