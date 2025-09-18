@@ -63,7 +63,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     padding: const EdgeInsets.only(bottom: 24),
                     child: Column(
                       children: [
-                        Image.asset('assets/utils/icon.png', width: 96, height: 96),
+                        Image.asset('assets/utils/icon.png', width: 256, height: 256),
                         const SizedBox(height: 12),
                         Text(
                           'Entrar',
