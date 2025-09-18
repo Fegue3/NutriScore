@@ -105,7 +105,7 @@ class _AppBottomNavState extends State<AppBottomNav> {
                     top: 0, left: 0, right: 0,
                     child: Container(
                       height: 1,
-                      color: Colors.black.withOpacity(0.07),
+                      color: Colors.black.withValues(alpha: 0.07),
                     ),
                   ),
 
