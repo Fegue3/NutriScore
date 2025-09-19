@@ -15,7 +15,6 @@ class _NutritionScreenState extends State<NutritionScreen> {
     if (off == -1) return "Ontem";
     if (off == 1) return "Amanhã";
     final d = DateTime.now().add(Duration(days: off));
-    // sem intl — usa formatador nativo do Material
     return MaterialLocalizations.of(ctx).formatMediumDate(d);
   }
 
@@ -42,6 +41,15 @@ class _NutritionScreenState extends State<NutritionScreen> {
           "Diário das Calorias",
           style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          // TODO: ação rápida "+"
+        },
+        backgroundColor: cs.primary,
+        foregroundColor: cs.onPrimary,
+        child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -109,7 +117,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
             ),
           ),
 
-          // ===== Conteúdo do dia com SLIDE do ecrã inteiro (chave muda por dia) =====
+          // ===== Conteúdo do dia com SLIDE do ecrã inteiro =====
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 260),
@@ -133,7 +141,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 }
 
-// ---------- Widgets auxiliares ----------
+// ---------- Auxiliares ----------
 
 class _ArrowBtn extends StatelessWidget {
   final IconData icon;
@@ -160,11 +168,13 @@ class _DayContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).padding.bottom;
     return ScrollConfiguration(
       behavior: const _BounceScrollBehavior(),
       child: ListView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        // só o essencial no fim (nada de espaço morto)
+        padding: EdgeInsets.fromLTRB(16, 12, 16, bottom + 16),
         children: const [
           _MealSection(title: "Pequeno-almoço", calories: 0, items: []),
           SizedBox(height: 16),
@@ -173,6 +183,10 @@ class _DayContent extends StatelessWidget {
           _MealSection(title: "Lanche", calories: 0, items: []),
           SizedBox(height: 16),
           _MealSection(title: "Jantar", calories: 0, items: []),
+          SizedBox(height: 16),
+          _WaterCard(),
+          SizedBox(height: 24),
+          _BottomActions(),
         ],
       ),
     );
@@ -190,8 +204,7 @@ class _BounceScrollBehavior extends ScrollBehavior {
   }
 }
 
-/// Card com header verde (título/kcal), corpo branco ao expandir
-/// e **rodapé conectado** “Adicionar alimento” (tudo no MESMO card).
+/// --------- MEAL CARD ---------
 class _MealSection extends StatefulWidget {
   final String title;
   final int calories;
@@ -291,13 +304,14 @@ class _MealSectionState extends State<_MealSection> {
               secondChild: const SizedBox.shrink(),
             ),
 
-            // DIVISOR sutil a ligar body -> footer
-            Container(
+            // Divisor sutil → desaparece quando expandes
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
               height: 1,
-              color: cs.outlineVariant.withValues(alpha: .5),
+              color: Colors.black.withOpacity(_expanded ? 0.0 : 0.06),
             ),
 
-            // FOOTER conectado (CTA dentro do MESMO card)
+            // FOOTER ligado (CTA dentro do mesmo card)
             Material(
               color: Colors.white,
               child: InkWell(
@@ -362,6 +376,261 @@ class _ItemsList extends StatelessWidget {
             child: Text("• $t", style: tt.bodyMedium?.copyWith(color: clr)),
           ),
       ],
+    );
+  }
+}
+
+/// --------- ÁGUA (mesmo estilo de card) ---------
+class _WaterCard extends StatefulWidget {
+  const _WaterCard();
+
+  @override
+  State<_WaterCard> createState() => _WaterCardState();
+}
+
+class _WaterCardState extends State<_WaterCard> {
+  int ml = 0;
+  final int goal = 2000;
+  bool _expanded = true;
+
+  void _add(int delta) => setState(() => ml = (ml + delta).clamp(0, 4000));
+  void _toggle() => setState(() => _expanded = !_expanded);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final progress = (ml / goal).clamp(0.0, 1.0);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(blurRadius: 14, offset: Offset(0, 6), color: Color(0x14000000)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: [
+            // HEADER verde
+            Material(
+              color: cs.primary,
+              child: InkWell(
+                onTap: _toggle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          "Água",
+                          style: tt.titleLarge?.copyWith(
+                            color: cs.onPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: ShapeDecoration(
+                          color: cs.onPrimary.withValues(alpha: 0.15),
+                          shape: const StadiumBorder(),
+                        ),
+                        child: Text(
+                          "${ml ~/ 100}dl / ${goal ~/ 100}dl",
+                          style: tt.titleMedium?.copyWith(
+                            color: cs.onPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0.0,
+                        duration: const Duration(milliseconds: 160),
+                        child: Icon(Icons.keyboard_arrow_down_rounded,
+                            color: cs.onPrimary, size: 26),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // BODY branco (progress + botões)
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 180),
+              crossFadeState:
+                  _expanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              firstChild: Container(
+                width: double.infinity,
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 12,
+                        backgroundColor: cs.outlineVariant.withValues(alpha: .4),
+                        valueColor: AlwaysStoppedAnimation(cs.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _WaterBtn(label: "+250 ml", onTap: () => _add(250)),
+                        const SizedBox(width: 8),
+                        _WaterBtn(label: "+500 ml", onTap: () => _add(500)),
+                        const SizedBox(width: 8),
+                        _WaterBtn(label: "−250 ml", onTap: () => _add(-250)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              secondChild: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WaterBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _WaterBtn({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: cs.primary, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          foregroundColor: cs.primary,
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+}
+
+/// --------- AÇÕES FINAIS (pills tonais + CTA em gradiente) ---------
+class _BottomActions extends StatelessWidget {
+  const _BottomActions();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    // Gradiente Fresh Green (#4CAF6D) → Leafy Green (#66BB6A)
+    const freshGreen = Color(0xFF4CAF6D);
+    const leafyGreen  = Color(0xFF66BB6A);
+
+    return Column(
+      children: [
+        Row(
+          children: const [
+            Expanded(child: _TonalPill(icon: Icons.pie_chart_outline_rounded, label: "Nutrição")),
+            SizedBox(width: 12),
+            Expanded(child: _TonalPill(icon: Icons.note_alt_outlined, label: "Notas")),
+          ],
+        ),
+        const SizedBox(height: 14),
+        // CTA principal em gradiente + ícone branco
+        DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: const [
+              BoxShadow(blurRadius: 18, offset: Offset(0, 10), color: Color(0x26000000)),
+            ],
+            gradient: const LinearGradient(
+              colors: [freshGreen, leafyGreen],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () {
+                // TODO: finalizar dia
+              },
+              icon: const Icon(Icons.flag_circle_rounded, color: Colors.white),
+              label: Text(
+                "Acabar o dia",
+                style: tt.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white, // <- branco (substitui o preto)
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: const StadiumBorder(),
+                foregroundColor: cs.onPrimary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TonalPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _TonalPill({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest, // tonal suave, sem borda dura
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 10,
+            offset: Offset(0, 4),
+            color: Color(0x12000000),
+          )
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: () {
+          // TODO: abrir secção
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: cs.onSurface.withValues(alpha: .85)),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: tt.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
