@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class NutritionScreen extends StatefulWidget {
   const NutritionScreen({super.key});
@@ -45,7 +46,8 @@ class _NutritionScreenState extends State<NutritionScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // TODO: ação rápida "+"
+          // Ação rápida "+" → abre a AddFoodScreen sem bottom nav
+          context.push('/add-food');
         },
         backgroundColor: cs.primary,
         foregroundColor: cs.onPrimary,
@@ -308,7 +310,7 @@ class _MealSectionState extends State<_MealSection> {
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               height: 1,
-              color: Colors.black.withOpacity(_expanded ? 0.0 : 0.06),
+              color: Colors.black.withValues(alpha: _expanded ? 0.0 : 0.06),
             ),
 
             // FOOTER ligado (CTA dentro do mesmo card)
@@ -316,7 +318,9 @@ class _MealSectionState extends State<_MealSection> {
               color: Colors.white,
               child: InkWell(
                 onTap: () {
-                  // TODO: abrir fluxo "Adicionar alimento"
+                  // Abre a nova screen de adicionar alimento (passa a refeição como query param)
+                  final meal = Uri.encodeComponent(widget.title);
+                  context.push('/add-food?meal=$meal');
                 },
                 child: Align(
                   alignment: Alignment.centerLeft,
