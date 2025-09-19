@@ -380,7 +380,7 @@ class _ItemsList extends StatelessWidget {
   }
 }
 
-/// --------- ÁGUA (mesmo estilo de card) ---------
+/// --------- ÁGUA (header + progress + footer "Adicionar água" com bottom-sheet) ---------
 class _WaterCard extends StatefulWidget {
   const _WaterCard();
 
@@ -393,8 +393,25 @@ class _WaterCardState extends State<_WaterCard> {
   final int goal = 2000;
   bool _expanded = true;
 
-  void _add(int delta) => setState(() => ml = (ml + delta).clamp(0, 4000));
   void _toggle() => setState(() => _expanded = !_expanded);
+  void _applyDelta(int delta) => setState(() => ml = (ml + delta).clamp(0, 40000));
+
+  Future<void> _openCustomAmountSheet() async {
+    final res = await showModalBottomSheet<_CustomAmountResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _CustomAmountSheet(),
+    );
+    if (res != null && res.valueMl > 0) {
+      _applyDelta(res.isSubtract ? -res.valueMl : res.valueMl);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -459,7 +476,7 @@ class _WaterCardState extends State<_WaterCard> {
               ),
             ),
 
-            // BODY branco (progress + botões)
+            // BODY branco (apenas progress)
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 180),
               crossFadeState:
@@ -480,20 +497,31 @@ class _WaterCardState extends State<_WaterCard> {
                         valueColor: AlwaysStoppedAnimation(cs.primary),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _WaterBtn(label: "+250 ml", onTap: () => _add(250)),
-                        const SizedBox(width: 8),
-                        _WaterBtn(label: "+500 ml", onTap: () => _add(500)),
-                        const SizedBox(width: 8),
-                        _WaterBtn(label: "−250 ml", onTap: () => _add(-250)),
-                      ],
-                    ),
                   ],
                 ),
               ),
               secondChild: const SizedBox.shrink(),
+            ),
+
+            // FOOTER “Adicionar água” (abre bottom-sheet)
+            Material(
+              color: Colors.white,
+              child: InkWell(
+                onTap: _openCustomAmountSheet,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                    child: Text(
+                      "Adicionar água",
+                      style: tt.titleMedium?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -502,27 +530,120 @@ class _WaterCardState extends State<_WaterCard> {
   }
 }
 
-class _WaterBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _WaterBtn({required this.label, required this.onTap});
+/// --------- Bottom sheet: quantidade + unidade + Somar/Subtrair ---------
+class _CustomAmountSheet extends StatefulWidget {
+  const _CustomAmountSheet();
+
+  @override
+  State<_CustomAmountSheet> createState() => _CustomAmountSheetState();
+}
+
+class _CustomAmountSheetState extends State<_CustomAmountSheet> {
+  final _controller = TextEditingController(text: "250");
+  String _unit = "ml";
+  bool _subtract = false;
+
+  int get _valueMl {
+    final raw = int.tryParse(_controller.text.trim()) ?? 0;
+    switch (_unit) {
+      case "dl":
+        return raw * 100;
+      case "L":
+      case "l":
+        return raw * 1000;
+      default:
+        return raw;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Expanded(
-      child: OutlinedButton(
-        onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: cs.primary, width: 1.5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          foregroundColor: cs.primary,
-        ),
-        child: Text(label),
+    final inset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, bottom: inset + 16, top: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text("Adicionar água",
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Quantidade",
+                    hintText: "ex.: 350",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              DropdownButtonHideUnderline(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: DropdownButton<String>(
+                    value: _unit,
+                    items: const [
+                      DropdownMenuItem(value: "ml", child: Text("ml")),
+                      DropdownMenuItem(value: "dl", child: Text("dl")),
+                      DropdownMenuItem(value: "L",  child: Text("L")),
+                    ],
+                    onChanged: (v) => setState(() => _unit = v ?? "ml"),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text("Somar")),
+              ButtonSegment(value: true,  label: Text("Subtrair")),
+            ],
+            selected: {_subtract},
+            onSelectionChanged: (s) => setState(() => _subtract = s.first),
+            style: ButtonStyle(
+              side: WidgetStatePropertyAll(BorderSide(color: cs.primary)),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(
+                _CustomAmountResult(valueMl: _valueMl, isSubtract: _subtract),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: cs.primary,
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("Aplicar"),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _CustomAmountResult {
+  final int valueMl;
+  final bool isSubtract;
+  const _CustomAmountResult({required this.valueMl, required this.isSubtract});
 }
 
 /// --------- AÇÕES FINAIS (pills tonais + CTA em gradiente) ---------
