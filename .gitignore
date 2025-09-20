@@ -1,5 +1,5 @@
 # ============================
-# Flutter / Dart
+# Flutter / Dart (Frontend)
 # ============================
 .dart_tool
 frontend/.dart_tool/
@@ -79,7 +79,7 @@ frontend/android/app/google-services.json
 frontend/ios/Runner/GoogleService-Info.plist
 
 # ============================
-# Env / Config files
+# Env / Config files (Frontend)
 # ============================
 frontend/.env
 frontend/.env.*
@@ -97,3 +97,43 @@ frontend/lib/core/env.dart
 # ============================
 .DS_Store
 Thumbs.db
+
+# =========================================================
+# Backend (NestJS + Prisma + Docker)
+# =========================================================
+
+# Node.js / NestJS
+backend/node_modules/
+backend/dist/
+backend/npm-debug.log*
+backend/yarn-debug.log*
+backend/yarn-error.log*
+backend/pnpm-debug.log*
+
+# Environment files
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Prisma
+backend/prisma/dev.db        # se usares SQLite em dev
+backend/prisma/*.sqlite
+backend/prisma/*.sqlite-journal
+
+# Logs
+backend/*.log
+backend/logs/
+
+# Docker
+db_data/                     # volume persistente do Postgres (se mapeares p/ host)
+**/docker/*.pid
+**/docker/*.sock
+
+# IDEs (backend)
+backend/.idea/
+backend/.vscode/
+backend/*.iml
+
+# Arquivos de build temporários
+backend/.turbo/
+backend/.cache/
