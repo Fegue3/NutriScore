@@ -22,9 +22,12 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+        working-directory: frontend
 
       - name: Analyze (lint)
         run: flutter analyze
+        working-directory: frontend
 
       - name: Run tests
         run: flutter test --no-pub
+        working-directory: frontend
