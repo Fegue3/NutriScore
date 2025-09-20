@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// NutriScore — AddFoodScreen (v7.1 – spacing tweaks)
+/// NutriScore — AddFoodScreen (v7.2 – alterna Histórico/Pesquisa ao submeter)
 class AddFoodScreen extends StatefulWidget {
   final String? initialMeal; // "Pequeno-almoço", "Almoço", "Lanche", "Jantar"
   const AddFoodScreen({super.key, this.initialMeal});
@@ -15,6 +15,9 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   final _searchCtrl = TextEditingController();
   static const _meals = <String>["Pequeno-almoço", "Almoço", "Lanche", "Jantar"];
   late String _selectedMeal;
+
+  // NOVO: apenas um flip de estado para mudar o título
+  bool _showPesquisa = false;
 
   final List<_HistoryItem> _history = const [
     _HistoryItem(name: "Iogurte natural", kcal: 63, brand: "Milbona", homemade: false, organic: true, quantityLabel: "125 g", sugarsG: 4.7, fatG: 3.5, saltG: 0.08),
@@ -34,6 +37,13 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSearchSubmitted(String q) {
+    final query = q.trim();
+    setState(() {
+      _showPesquisa = query.isNotEmpty; // se tem texto -> “Pesquisa”, senão volta a “Histórico”
+    });
   }
 
   @override
@@ -92,7 +102,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                       controller: _searchCtrl,
                       hintText: "Pesquisar alimento…",
                       textColor: cs.onPrimary,
-                      onSubmitted: (_) {},
+                      onSubmitted: _onSearchSubmitted, // NOVO
                     ),
                   ),
                 ],
@@ -113,7 +123,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
               }),
             ),
 
-            // ===================== HISTÓRICO =====================
+            // ===================== HISTÓRICO / PESQUISA =====================
             Expanded(
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -124,7 +134,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 8),
                       child: Text(
-                        "Histórico",
+                        _showPesquisa ? "Pesquisa" : "Histórico", // NOVO
                         style: tt.titleMedium?.copyWith(
                           color: cs.onSurface,
                           fontWeight: FontWeight.w800,
@@ -169,7 +179,7 @@ class _MealComboChipCentered extends StatelessWidget {
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: ShapeDecoration(
+      decoration: const ShapeDecoration(
         color: Colors.transparent, // verde mais “blendado”
         shape: StadiumBorder(),
       ),
@@ -294,7 +304,7 @@ class _SearchBarHero extends StatelessWidget {
                   icon: Icon(Icons.close_rounded, color: textColor),
                   onPressed: () {
                     controller.clear();
-                    onSubmitted?.call('');
+                    onSubmitted?.call(''); // limpa para voltar a "Histórico"
                   },
                 ),
             ],
