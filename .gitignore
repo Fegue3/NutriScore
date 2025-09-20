@@ -1,31 +1,31 @@
 # ============================
 # Flutter / Dart
 # ============================
-.dart_tool/
-.packages
-.pub-cache/
-build/
-**/build/
-**/GeneratedPluginRegistrant.*
-.flutter-plugins-dependencies
+frontend/.dart_tool/
+frontend/.packages
+frontend/.pub-cache/
+frontend/build/
+frontend/**/build/
+frontend/**/GeneratedPluginRegistrant.*
+frontend/.flutter-plugins-dependencies
 
 # ============================
 # IDEs (IntelliJ / VS Code / Android Studio)
 # ============================
-.idea/
-.vscode/
-*.iml
+frontend/.idea/
+frontend/.vscode/
+frontend/*.iml
 
 # ============================
 # Android
 # ============================
-android/.gradle/
-android/captures/
-android/app/build/
-android/local.properties
-*.keystore
-*.jks
-*.iml
+frontend/android/.gradle/
+frontend/android/captures/
+frontend/android/app/build/
+frontend/android/local.properties
+frontend/android/*.keystore
+frontend/android/*.jks
+frontend/android/*.iml
 
 # Gradle cache
 .gradle/
@@ -34,55 +34,55 @@ android/local.properties
 # ============================
 # iOS
 # ============================
-ios/
-ios/Flutter/.last_build_id
-ios/Pods/
-ios/Runner.xcworkspace/
-ios/Runner/GeneratedPluginRegistrant.*
-ios/build/
+frontend/ios/
+frontend/ios/Flutter/.last_build_id
+frontend/ios/Pods/
+frontend/ios/Runner.xcworkspace/
+frontend/ios/Runner/GeneratedPluginRegistrant.*
+frontend/ios/build/
 
 # ============================
 # macOS
 # ============================
-macos/
-macos/Flutter/ephemeral/
-macos/Pods/
-macos/Runner.xcworkspace/
-macos/build/
+frontend/macos/
+frontend/macos/Flutter/ephemeral/
+frontend/macos/Pods/
+frontend/macos/Runner.xcworkspace/
+frontend/macos/build/
 
 # ============================
 # Windows
 # ============================
-windows/
-windows/flutter/ephemeral/
-windows/build/
+frontend/windows/
+frontend/windows/flutter/ephemeral/
+frontend/windows/build/
 
 # ============================
 # Linux
 # ============================
-linux/
-linux/flutter/ephemeral/
-linux/build/
+frontend/linux/
+frontend/linux/flutter/ephemeral/
+frontend/linux/build/
 
 # ============================
 # Web
 # ============================
-web/
-web/.dart_tool/
-web/build/
+frontend/web/
+frontend/web/.dart_tool/
+frontend/web/build/
 
 # ============================
 # Firebase / Google Services
 # ============================
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
+frontend/android/app/google-services.json
+frontend/ios/Runner/GoogleService-Info.plist
 
 # ============================
 # Env / Config files
 # ============================
-.env
-.env.*
-lib/core/env.dart
+frontend/.env
+frontend/.env.*
+frontend/lib/core/env.dart
 
 # ============================
 # Outros ficheiros temporários

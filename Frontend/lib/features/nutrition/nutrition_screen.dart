@@ -8,8 +8,21 @@ class NutritionScreen extends StatefulWidget {
 }
 
 class _NutritionScreenState extends State<NutritionScreen> {
+  // ===== Estado de navegação por dia =====
   int _dayOffset = 0;   // 0=Hoje, -1=Ontem, 1=Amanhã…
   int _slideDir = 0;    // -1 esquerda→direita, +1 direita→esquerda
+
+  // ===== Calorias =====
+  int _dailyGoal = 2200; // Meta diária (podes puxar do perfil)
+  final Map<String, int> _mealCalories = {
+    "Pequeno-almoço": 0,
+    "Almoço": 0,
+    "Lanche": 0,
+    "Jantar": 0,
+  };
+
+  int get _consumed =>
+      _mealCalories.values.fold<int>(0, (sum, v) => sum + v);
 
   String _labelFor(BuildContext ctx, int off) {
     if (off == 0) return "Hoje";
@@ -25,6 +38,12 @@ class _NutritionScreenState extends State<NutritionScreen> {
       _slideDir = delta > 0 ? 1 : -1;
       _dayOffset += delta;
     });
+  }
+
+  // Disponível quando integrares o fluxo “Adicionar alimento”
+  void _setMealCalories(String meal, int kcal) {
+    if (!_mealCalories.containsKey(meal)) return;
+    setState(() => _mealCalories[meal] = kcal.clamp(0, 100000));
   }
 
   @override
@@ -46,7 +65,6 @@ class _NutritionScreenState extends State<NutritionScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Ação rápida "+" → abre a AddFoodScreen sem bottom nav
           context.push('/add-food');
         },
         backgroundColor: cs.primary,
@@ -55,71 +73,82 @@ class _NutritionScreenState extends State<NutritionScreen> {
       ),
       body: Column(
         children: [
-          // ===== Barra verde com setas + swipe + título centrado =====
+          // ===== HERO VERDE (setas + data + resumo de calorias) =====
           Container(
             color: cs.primary,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
             child: SafeArea(
               bottom: false,
-              child: GestureDetector(
-                onHorizontalDragEnd: (d) {
-                  final v = d.primaryVelocity ?? 0;
-                  if (v > 120) _go(-1);
-                  if (v < -120) _go(1);
-                },
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 48, height: 40,
-                      child: _ArrowBtn(
-                        icon: Icons.chevron_left_rounded,
-                        onTap: () => _go(-1),
-                      ),
-                    ),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 240),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, anim) {
-                          final begin = Offset((_slideDir) * 0.25, 0);
-                          return ClipRect(
-                            child: SlideTransition(
-                              position: Tween(begin: begin, end: Offset.zero).animate(anim),
-                              child: FadeTransition(opacity: anim, child: child),
-                            ),
-                          );
-                        },
-                        child: Center(
-                          key: ValueKey(_dayOffset),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: const ShapeDecoration(
-                              color: Colors.white, shape: StadiumBorder(),
-                            ),
-                            child: Text(
-                              _labelFor(context, _dayOffset),
-                              style: tt.titleMedium?.copyWith(
-                                color: cs.primary, fontWeight: FontWeight.w700),
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onHorizontalDragEnd: (d) {
+                      final v = d.primaryVelocity ?? 0;
+                      if (v > 120) _go(-1);
+                      if (v < -120) _go(1);
+                    },
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 48, height: 40,
+                          child: _ArrowBtn(
+                            icon: Icons.chevron_left_rounded,
+                            onTap: () => _go(-1),
+                          ),
+                        ),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 240),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, anim) {
+                              final begin = Offset((_slideDir) * 0.25, 0);
+                              return ClipRect(
+                                child: SlideTransition(
+                                  position: Tween(begin: begin, end: Offset.zero).animate(anim),
+                                  child: FadeTransition(opacity: anim, child: child),
+                                ),
+                              );
+                            },
+                            child: Center(
+                              key: ValueKey(_dayOffset),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: const ShapeDecoration(
+                                  color: Colors.white, shape: StadiumBorder(),
+                                ),
+                                child: Text(
+                                  _labelFor(context, _dayOffset),
+                                  style: tt.titleMedium?.copyWith(
+                                    color: cs.primary, fontWeight: FontWeight.w700),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        SizedBox(
+                          width: 48, height: 40,
+                          child: _ArrowBtn(
+                            icon: Icons.chevron_right_rounded,
+                            onTap: () => _go(1),
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(
-                      width: 48, height: 40,
-                      child: _ArrowBtn(
-                        icon: Icons.chevron_right_rounded,
-                        onTap: () => _go(1),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // --- Resumo de calorias (compacto, sem ícones) ---
+                  _CalorieSummaryConnectedCompact(
+                    goal: _dailyGoal,
+                    consumed: _consumed,
+                  ),
+                ],
               ),
             ),
           ),
 
-          // ===== Conteúdo do dia com SLIDE do ecrã inteiro =====
+          // ===== Conteúdo do dia =====
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 260),
@@ -134,7 +163,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
                   ),
                 );
               },
-              child: _DayContent(key: ValueKey(_dayOffset)),
+              child: _DayContent(
+                key: ValueKey(_dayOffset),
+                goal: _dailyGoal,
+                consumed: _consumed,
+                mealCalories: _mealCalories,
+                onTapAddFood: (mealTitle) {
+                  final meal = Uri.encodeComponent(mealTitle);
+                  context.push('/add-food?meal=$meal');
+                },
+                // onCaloriesUpdated: _setMealCalories,
+              ),
             ),
           ),
         ],
@@ -166,7 +205,18 @@ class _ArrowBtn extends StatelessWidget {
 }
 
 class _DayContent extends StatelessWidget {
-  const _DayContent({super.key});
+  final int goal;
+  final int consumed;
+  final Map<String, int> mealCalories;
+  final void Function(String mealTitle)? onTapAddFood;
+
+  const _DayContent({
+    super.key,
+    required this.goal,
+    required this.consumed,
+    required this.mealCalories,
+    this.onTapAddFood,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -175,20 +225,39 @@ class _DayContent extends StatelessWidget {
       behavior: const _BounceScrollBehavior(),
       child: ListView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        // só o essencial no fim (nada de espaço morto)
         padding: EdgeInsets.fromLTRB(16, 12, 16, bottom + 16),
-        children: const [
-          _MealSection(title: "Pequeno-almoço", calories: 0, items: []),
-          SizedBox(height: 16),
-          _MealSection(title: "Almoço", calories: 0, items: []),
-          SizedBox(height: 16),
-          _MealSection(title: "Lanche", calories: 0, items: []),
-          SizedBox(height: 16),
-          _MealSection(title: "Jantar", calories: 0, items: []),
-          SizedBox(height: 16),
-          _WaterCard(),
-          SizedBox(height: 24),
-          _BottomActions(),
+        children: [
+          _MealSection(
+            title: "Pequeno-almoço",
+            calories: mealCalories["Pequeno-almoço"] ?? 0,
+            items: const [],
+            onAddTap: () => onTapAddFood?.call("Pequeno-almoço"),
+          ),
+          const SizedBox(height: 16),
+          _MealSection(
+            title: "Almoço",
+            calories: mealCalories["Almoço"] ?? 0,
+            items: const [],
+            onAddTap: () => onTapAddFood?.call("Almoço"),
+          ),
+          const SizedBox(height: 16),
+          _MealSection(
+            title: "Lanche",
+            calories: mealCalories["Lanche"] ?? 0,
+            items: const [],
+            onAddTap: () => onTapAddFood?.call("Lanche"),
+          ),
+          const SizedBox(height: 16),
+          _MealSection(
+            title: "Jantar",
+            calories: mealCalories["Jantar"] ?? 0,
+            items: const [],
+            onAddTap: () => onTapAddFood?.call("Jantar"),
+          ),
+          const SizedBox(height: 16),
+          const _WaterCard(),
+          const SizedBox(height: 24),
+          const _BottomActions(),
         ],
       ),
     );
@@ -206,16 +275,162 @@ class _BounceScrollBehavior extends ScrollBehavior {
   }
 }
 
+/// --------- CALORIE SUMMARY (conectado, compacto e sem ícones) ---------
+class _CalorieSummaryConnectedCompact extends StatelessWidget {
+  final int goal;
+  final int consumed;
+  const _CalorieSummaryConnectedCompact({
+    required this.goal,
+    required this.consumed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    final remaining = goal - consumed;
+    final ok = remaining >= 0;
+
+    final onP = cs.onPrimary;
+    final dividerColor = onP.withValues(alpha: .22);
+
+    // Segmento compacto (sem ícone)
+    Widget seg({
+      required String label,
+      required String value,
+      Color? valueColor,
+    }) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // rótulo em "chip" pequeno
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: onP.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tt.labelSmall?.copyWith(
+                    color: onP,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              // valor: adapta escala para caber no terço disponível
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: tt.titleMedium?.copyWith(
+                    color: valueColor ?? onP,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 70, // mais baixo para garantir espaço
+        child: Stack(
+          children: [
+            // Fundo
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: onP.withValues(alpha: .14),
+                  boxShadow: const [
+                    BoxShadow(blurRadius: 10, offset: Offset(0, 4), color: Color(0x22000000)),
+                  ],
+                ),
+              ),
+            ),
+            // Conteúdo (3 partes iguais)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                seg(label: "Meta", value: "$goal kcal"),
+                seg(label: "Consumidas", value: "$consumed kcal"),
+                seg(
+                  label: "Restantes",
+                  value: "${remaining.abs()} kcal",
+                  valueColor: ok ? onP : cs.error,
+                ),
+              ],
+            ),
+            // Divisórias desenhadas (não ocupam largura)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _VerticalDividersPainter(color: dividerColor, count: 2, topPad: 8, bottomPad: 8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// pinta N divisórias verticais igualmente espaçadas, sem ocupar largura
+class _VerticalDividersPainter extends CustomPainter {
+  final Color color;
+  final int count;
+  final double topPad;
+  final double bottomPad;
+  const _VerticalDividersPainter({
+    required this.color,
+    this.count = 2,
+    this.topPad = 10,
+    this.bottomPad = 10,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 1; i <= count; i++) {
+      final x = size.width * i / (count + 1);
+      final alignedX = x.floorToDouble() + 0.5; // alinhado ao pixel
+      canvas.drawLine(Offset(alignedX, topPad), Offset(alignedX, size.height - bottomPad), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _VerticalDividersPainter old) =>
+      old.color != color || old.count != count || old.topPad != topPad || old.bottomPad != bottomPad;
+}
+
 /// --------- MEAL CARD ---------
 class _MealSection extends StatefulWidget {
   final String title;
   final int calories;
   final List<String> items;
+  final VoidCallback? onAddTap;
 
   const _MealSection({
     required this.title,
     required this.calories,
     required this.items,
+    this.onAddTap,
   });
 
   @override
@@ -318,9 +533,12 @@ class _MealSectionState extends State<_MealSection> {
               color: Colors.white,
               child: InkWell(
                 onTap: () {
-                  // Abre a nova screen de adicionar alimento (passa a refeição como query param)
-                  final meal = Uri.encodeComponent(widget.title);
-                  context.push('/add-food?meal=$meal');
+                  if (widget.onAddTap != null) {
+                    widget.onAddTap!();
+                  } else {
+                    final meal = Uri.encodeComponent(widget.title);
+                    context.push('/add-food?meal=$meal');
+                  }
                 },
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -673,7 +891,6 @@ class _BottomActions extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        // CTA principal em gradiente + ícone branco
         DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
@@ -689,15 +906,13 @@ class _BottomActions extends StatelessWidget {
           child: SizedBox(
             width: double.infinity,
             child: TextButton.icon(
-              onPressed: () {
-                // TODO: finalizar dia
-              },
+              onPressed: () {},
               icon: const Icon(Icons.flag_circle_rounded, color: Colors.white),
               label: Text(
                 "Acabar o dia",
                 style: tt.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: Colors.white, // <- branco (substitui o preto)
+                  color: Colors.white,
                 ),
               ),
               style: TextButton.styleFrom(
@@ -726,7 +941,7 @@ class _TonalPill extends StatelessWidget {
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest, // tonal suave, sem borda dura
+        color: cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(28),
         boxShadow: const [
           BoxShadow(
@@ -738,9 +953,7 @@ class _TonalPill extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(28),
-        onTap: () {
-          // TODO: abrir secção
-        },
+        onTap: () {},
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
