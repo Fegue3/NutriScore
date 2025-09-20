@@ -32,7 +32,7 @@ services:
     build:
       context: ./Backend/api
       dockerfile: Dockerfile
-      env_file:
+    env_file:
       - ./Backend/api/.env
     depends_on:
       db:
