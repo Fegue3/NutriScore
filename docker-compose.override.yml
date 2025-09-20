@@ -1,0 +1,10 @@
+services:
+  api:
+    image: node:20-alpine
+    working_dir: /usr/src/app
+    entrypoint: ["/bin/sh","-lc","chmod +x docker/dev-entrypoint.sh && docker/dev-entrypoint.sh"]
+    env_file:
+      - ./backend/api/.env
+    volumes:
+      - ./backend/api:/usr/src/app
+      - /usr/src/app/node_modules

@@ -1,0 +1,311 @@
+// ---------- PRISMA / POSTGRES ----------
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- ENUMS ----------
+enum NutriGrade {
+  A
+  B
+  C
+  D
+  E
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum Unit {
+  GRAM
+  ML
+  PIECE
+}
+
+// ---------- USERS ----------
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relações
+  preferences UserPreferences?
+  goals       UserGoals?
+  meals       Meal[] // dias/refeições
+  mealItems   MealItem[] // se precisares de autorias
+  customFoods CustomFood[]
+  customMeals CustomMeal[]
+  history     ProductHistory[]
+  favorites   FavoriteProduct[]
+}
+
+// ---------- USER SETTINGS ----------
+model UserPreferences {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ex: alertas / restrições
+  lowSalt    Boolean @default(false)
+  lowSugar   Boolean @default(false)
+  vegetarian Boolean @default(false)
+  vegan      Boolean @default(false)
+
+  // alergias / intolerâncias (texto simples por agora)
+  allergens String? // ex: "milk, peanuts"
+
+  // metas diárias base
+  dailyCalories  Int? // kcal alvo
+  carbPercent    Int? // 0..100
+  proteinPercent Int?
+  fatPercent     Int?
+  updatedAt      DateTime @updatedAt
+}
+
+model UserGoals {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // objetivo de peso e datas (opcional)
+  currentWeightKg Decimal?  @db.Decimal(5, 2)
+  targetWeightKg  Decimal?  @db.Decimal(5, 2)
+  targetDate      DateTime?
+  activityLevel   String? // ex: "sedentary", "light", etc.
+  updatedAt       DateTime  @updatedAt
+}
+
+// ---------- PRODUCT (cache OFF) ----------
+model Product {
+  id          String  @id @default(uuid())
+  barcode     String  @unique // OFF: product.code
+  name        String // product_name
+  brand       String? // brands
+  quantity    String? // ex: "500 g", OFF quantity
+  servingSize String? // ex: "30g", serving_size
+  imageUrl    String? // image_front_url (opcional)
+  countries   String? // countries
+
+  // Classificações
+  nutriScore      NutriGrade? // nutriscore_grade (A..E)
+  nutriScoreScore Int? // nutriscore_score (valor)
+  novaGroup       Int? // 1..4
+  ecoScore        String? // ecoscore_grade (a..e)
+
+  // Listas textuais
+  categories      String? // categories
+  labels          String? // labels
+  allergens       String? // allergens
+  ingredientsText String? // ingredients_text
+
+  // Nutrimentos (por 100g)
+  energyKcal_100g Int? // energy-kcal_100g
+  proteins_100g   Decimal? @db.Decimal(6, 2)
+  carbs_100g      Decimal? @db.Decimal(6, 2)
+  sugars_100g     Decimal? @db.Decimal(6, 2)
+  fat_100g        Decimal? @db.Decimal(6, 2)
+  satFat_100g     Decimal? @db.Decimal(6, 2)
+  fiber_100g      Decimal? @db.Decimal(6, 2)
+  salt_100g       Decimal? @db.Decimal(6, 2)
+  sodium_100g     Decimal? @db.Decimal(6, 2)
+
+  // Nutrimentos (por porção) - opcionais
+  energyKcal_serv Int?
+  proteins_serv   Decimal? @db.Decimal(6, 2)
+  carbs_serv      Decimal? @db.Decimal(6, 2)
+  sugars_serv     Decimal? @db.Decimal(6, 2)
+  fat_serv        Decimal? @db.Decimal(6, 2)
+  satFat_serv     Decimal? @db.Decimal(6, 2)
+  fiber_serv      Decimal? @db.Decimal(6, 2)
+  salt_serv       Decimal? @db.Decimal(6, 2)
+  sodium_serv     Decimal? @db.Decimal(6, 2)
+
+  // Timestamps de cache
+  lastFetchedAt DateTime @default(now()) // quando veio da OFF
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Payload bruto da OFF (para teres "tudo literalmente")
+  off_raw Json? // JSON completo do product
+
+  // relações utilitárias
+  history        ProductHistory[]
+  favorites      FavoriteProduct[]
+  CustomMealItem CustomMealItem[]
+  MealItem       MealItem[]
+
+  @@index([name])
+  @@index([brand])
+  @@index([categories])
+}
+
+// Histórico de scans/pesquisas por utilizador
+model ProductHistory {
+  id     BigInt @id @default(autoincrement())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  barcode String
+  product Product? @relation(fields: [barcode], references: [barcode], onDelete: SetNull)
+
+  scannedAt  DateTime    @default(now())
+  nutriScore NutriGrade?
+  calories   Int?
+  sugars     Decimal?    @db.Decimal(6, 2)
+  fat        Decimal?    @db.Decimal(6, 2)
+  salt       Decimal?    @db.Decimal(6, 2)
+
+  @@index([userId, scannedAt])
+  @@index([barcode])
+}
+
+// Favoritos por utilizador
+model FavoriteProduct {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  barcode String
+  product Product @relation(fields: [barcode], references: [barcode], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, barcode])
+}
+
+// ---------- CUSTOM FOODS / MEALS ----------
+model CustomFood {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  brand        String?
+  defaultUnit  Unit     @default(GRAM)
+  gramsPerUnit Decimal? @db.Decimal(7, 2) // se unit=PIECE: quantos gr por unidade
+
+  // nutrientes por 100g (mesma base do Product)
+  energyKcal_100g Int?
+  proteins_100g   Decimal? @db.Decimal(6, 2)
+  carbs_100g      Decimal? @db.Decimal(6, 2)
+  sugars_100g     Decimal? @db.Decimal(6, 2)
+  fat_100g        Decimal? @db.Decimal(6, 2)
+  satFat_100g     Decimal? @db.Decimal(6, 2)
+  fiber_100g      Decimal? @db.Decimal(6, 2)
+  salt_100g       Decimal? @db.Decimal(6, 2)
+  sodium_100g     Decimal? @db.Decimal(6, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mealItems      MealItem[]
+  CustomMealItem CustomMealItem[]
+}
+
+model CustomMeal {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  // macro “cacheada” opcional (kcal/macros totais calculadas)
+  totalKcal    Int?
+  totalProtein Decimal? @db.Decimal(8, 2)
+  totalCarb    Decimal? @db.Decimal(8, 2)
+  totalFat     Decimal? @db.Decimal(8, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CustomMealItem[]
+}
+
+model CustomMealItem {
+  id           String     @id @default(uuid())
+  customMealId String
+  customMeal   CustomMeal @relation(fields: [customMealId], references: [id], onDelete: Cascade)
+
+  // item pode referenciar um CustomFood OU um Product (by barcode)
+  customFoodId String?
+  customFood   CustomFood? @relation(fields: [customFoodId], references: [id], onDelete: SetNull)
+
+  productBarcode String?
+  product        Product? @relation(fields: [productBarcode], references: [barcode], onDelete: SetNull)
+
+  // quantidade informada
+  unit       Unit     @default(GRAM)
+  quantity   Decimal  @db.Decimal(10, 2) // ex.: 150 (g), 250 (ml) ou 1 (piece)
+  gramsTotal Decimal? @db.Decimal(10, 2) // normalizado para gramas (útil para cálculos)
+
+  // caches de nutrientes do item (opcional) para congelar o valor à data
+  kcal    Int?
+  protein Decimal? @db.Decimal(8, 2)
+  carb    Decimal? @db.Decimal(8, 2)
+  fat     Decimal? @db.Decimal(8, 2)
+
+  position Int? // ordem dentro do custom meal
+}
+
+// ---------- LOG DE REFEIÇÕES (DIA A DIA) ----------
+model Meal {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // data “canónica” da refeição (normaliza para UTC 00:00 do dia do user)
+  date  DateTime
+  type  MealType // breakfast, lunch, dinner, snack
+  notes String?
+
+  // somatórios (opcionais, para leitura rápida)
+  totalKcal    Int?
+  totalProtein Decimal? @db.Decimal(8, 2)
+  totalCarb    Decimal? @db.Decimal(8, 2)
+  totalFat     Decimal? @db.Decimal(8, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items MealItem[]
+
+  @@unique([userId, date, type]) // 1 reg por tipo de refeição por dia
+  @@index([userId, date])
+}
+
+model MealItem {
+  id     String @id @default(uuid())
+  mealId String
+  meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  // fonte: Product (barcode) ou CustomFood
+  productBarcode String?
+  product        Product? @relation(fields: [productBarcode], references: [barcode], onDelete: SetNull)
+
+  customFoodId String?
+  customFood   CustomFood? @relation(fields: [customFoodId], references: [id], onDelete: SetNull)
+
+  // quantidade informada
+  unit       Unit     @default(GRAM)
+  quantity   Decimal  @db.Decimal(10, 2) // ex.: 75 g; 250 ml; 1 peça
+  gramsTotal Decimal? @db.Decimal(10, 2)
+
+  // caches de nutrientes no momento do registo (congela valores da OFF)
+  kcal    Int?
+  protein Decimal? @db.Decimal(8, 2)
+  carb    Decimal? @db.Decimal(8, 2)
+  fat     Decimal? @db.Decimal(8, 2)
+  sugars  Decimal? @db.Decimal(8, 2)
+  fiber   Decimal? @db.Decimal(8, 2)
+  salt    Decimal? @db.Decimal(8, 2)
+
+  position Int?
+  User     User?   @relation(fields: [userId], references: [id])
+  userId   String?
+}
