@@ -1,6 +1,7 @@
 # ============================
 # Flutter / Dart
 # ============================
+.dart_tool
 frontend/.dart_tool/
 frontend/.packages
 frontend/.pub-cache/
