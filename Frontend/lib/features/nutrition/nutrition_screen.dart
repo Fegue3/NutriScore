@@ -13,7 +13,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
   int _slideDir = 0;    // -1 esquerda→direita, +1 direita→esquerda
 
   // ===== Calorias =====
-  int _dailyGoal = 2200; // Meta diária (podes puxar do perfil)
+  final int _dailyGoal = 2200; // Meta diária (podes puxar do perfil)
   final Map<String, int> _mealCalories = {
     "Pequeno-almoço": 0,
     "Almoço": 0,
