@@ -40,7 +40,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # estas podem vir do .env também
+      DATABASE_URL: ${DATABASE_URL:-postgresql://nutriscore:nutriscore@db:5432/nutriscore?schema=public}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports: ["3000:3000"]
 
