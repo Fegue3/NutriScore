@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16-alpine
@@ -6,9 +8,22 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nutriscore}
       POSTGRES_DB: ${POSTGRES_DB:-nutriscore}
     ports: ["5432:5432"]
-    volumes: [ "db_data:/var/lib/postgresql/data" ]
+    volumes:
+      - db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL","pg_isready -U ${POSTGRES_USER:-nutriscore} -d ${POSTGRES_DB:-nutriscore} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server","--save","","--appendonly","no"]
+    ports: ["6379:6379"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD","redis-cli","ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,8 +35,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    env_file: [ ./Backend/api/.env ]
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./Backend/api/.env
+    environment:
+      # estas podem vir do .env também
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports: ["3000:3000"]
 
 volumes:
   db_data:
+  redis_data:
