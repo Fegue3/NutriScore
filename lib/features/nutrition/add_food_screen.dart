@@ -58,7 +58,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
               ),
               child: Column(
                 children: [
-                  // Back + combo (chip verde destacável)
+                  // Back + combo (chip verde blendado)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                     child: Row(
@@ -85,9 +85,9 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                     ),
                   ),
 
-                  // Search pill (frosted) — gap maior ao topo para separar do combo
+                  // Search pill (frosted)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), // ↑ gap topo
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                     child: _SearchBarHero(
                       controller: _searchCtrl,
                       hintText: "Pesquisar alimento…",
@@ -99,13 +99,13 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
               ),
             ),
 
-            // Curva separadora (hero → conteúdo claro)
+            // Curva separadora
             ClipPath(
               clipper: _TopCurveClipper(),
               child: Container(height: 16, color: cs.surface),
             ),
 
-            // ===================== SCAN (FUNDO CLARO, ÁREA INTERNA VERDE) =====================
+            // ===================== SCAN =====================
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: _ScanCardSurfaceGreen(onTap: () {
@@ -147,7 +147,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
 /* ============================ WIDGETS HERO ============================ */
 
 /// Chip verde com **texto branco + seta** juntos e **centrados**.
-/// Tamanho do texto revertido ao padrão (sem boost).
+/// Blendado com o fundo (sem sombra/elevation).
 class _MealComboChipCentered extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
@@ -170,14 +170,10 @@ class _MealComboChipCentered extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: ShapeDecoration(
-        color: chipColor,
-        shape: const StadiumBorder(),
-        shadows: const [
-          BoxShadow(blurRadius: 14, offset: Offset(0, 6), color: Color(0x33000000)),
-        ],
+        color: Colors.transparent, // verde mais “blendado”
+        shape: StadiumBorder(),
       ),
       child: Theme(
-        // remove highlight/splash/hover no dropdown
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
@@ -189,7 +185,7 @@ class _MealComboChipCentered extends StatelessWidget {
             isExpanded: true,
             icon: const SizedBox.shrink(), // desenhamos a nossa seta
             alignment: Alignment.center,
-            dropdownColor: chipColor, // fundo verde
+            dropdownColor: chipColor, // menu verde sólido
             borderRadius: BorderRadius.circular(12),
             // Texto no botão (centrado + seta) — branco
             selectedItemBuilder: (_) => _meals
@@ -201,6 +197,7 @@ class _MealComboChipCentered extends StatelessWidget {
                         Text(
                           m,
                           style: tt.titleMedium?.copyWith(
+                            fontSize: 20,
                             color: textColor,
                             fontWeight: FontWeight.w800,
                           ),
@@ -242,7 +239,7 @@ class _MealComboChipCentered extends StatelessWidget {
   }
 }
 
-/// Search bar “frosted” (blur + borda suave), moderna.
+/// Search bar “frosted”
 class _SearchBarHero extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
