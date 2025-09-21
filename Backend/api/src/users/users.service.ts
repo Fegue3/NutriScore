@@ -18,8 +18,10 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: { email, passwordHash, name: name ?? null },
     });
-    await this.prisma.userPreferences.create({ data: { userId: user.id } }).catch(() => {});
+
+    // Criar o registo "goals" (que agora inclui as preferências)
     await this.prisma.userGoals.create({ data: { userId: user.id } }).catch(() => {});
+
     return user;
   }
 
