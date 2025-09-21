@@ -8,6 +8,7 @@ import '../../features/home/home_screen.dart';
 import '../../features/nutrition/nutrition_screen.dart';
 import '../../features/nutrition/add_food_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/auth/onboarding_screen.dart';
 import '../app_shell.dart';
 import '../di.dart';
 
@@ -35,6 +36,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/', builder: (_, __) => const AuthHubScreen()),
     GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
     GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
+    GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
 
     // full screen fora do shell
     GoRoute(
