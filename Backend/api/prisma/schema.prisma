@@ -34,6 +34,8 @@ enum Unit {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
+  passwordHash String
+  refreshTokenHash String?
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
