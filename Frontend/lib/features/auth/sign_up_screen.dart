@@ -33,7 +33,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       );
-      if (mounted) context.go('/dashboard');
+      if (mounted) context.go('/onboarding');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
