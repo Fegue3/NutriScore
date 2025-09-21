@@ -1,37 +1,36 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
+import '../auth_api.dart';
+import '../auth_storage.dart';
 
+/// Repositório simples para gerir sessão + notificar o router.
 class AuthRepository {
-  AuthRepository(this._client);
-  final SupabaseClient _client;
+  final _changes = StreamController<void>.broadcast();
+  bool _isLoggedIn = false;
 
-  // Stream para o router ouvir e refrescar
-  Stream<void> get authStateChanges =>
-    _client.auth.onAuthStateChange.map((_) {});
+  bool get isLoggedIn => _isLoggedIn;
+  Stream<void> get authStateChanges => _changes.stream;
 
-  // Getter usado no redirect do GoRouter
-  bool get isLoggedIn => _client.auth.currentSession != null;
-
-  Future<AuthResponse> signIn({
-    required String email,
-    required String password,
-  }) {
-    return _client.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
+  Future<void> bootstrap() async {
+    final access = await AuthStorage.I.readAccessToken();
+    _isLoggedIn = access != null && access.isNotEmpty;
+    AuthApi.I.setAccessToken(access);
+    _changes.add(null);
   }
 
-  Future<AuthResponse> signUp({
-    required String email,
-    required String password,
-    String? fullName,
-  }) {
-    return _client.auth.signUp(
-      email: email,
-      password: password,
-      data: fullName != null ? {'full_name': fullName} : null,
-    );
+  Future<void> onLoginSuccess({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    await AuthStorage.I.saveTokens(accessToken, refreshToken);
+    AuthApi.I.setAccessToken(accessToken);
+    _isLoggedIn = true;
+    _changes.add(null);
   }
 
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> logout() async {
+    await AuthStorage.I.clear();
+    AuthApi.I.setAccessToken(null);
+    _isLoggedIn = false;
+    _changes.add(null);
+  }
 }
