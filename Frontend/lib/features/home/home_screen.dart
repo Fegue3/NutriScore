@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../app/di.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -7,12 +8,21 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () => di.authRepository.signOut(),
-          child: const Text('Logout (mock)'),
-        ),
+      appBar: AppBar(
+        title: const Text('Dashboard'),
+        actions: [
+          IconButton(
+            tooltip: 'Terminar sessão',
+            onPressed: () {
+              di.authRepository.logout(); // <— este é o nome certo
+              context.go('/');            // opcional
+            },
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: const Center(
+        child: Text('Bem-vindo ao NutriScore 👋'),
       ),
     );
   }
