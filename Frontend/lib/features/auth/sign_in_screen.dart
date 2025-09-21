@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../data/auth_api.dart';
 import '../../app/di.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -27,9 +28,13 @@ class _SignInScreenState extends State<SignInScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      await di.authRepository.signIn(
+      final result = await AuthApi.I.signIn(
         email: _email.text.trim(),
         password: _password.text,
+      );
+      await di.authRepository.onLoginSuccess(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       );
       if (mounted) context.go('/dashboard');
     } catch (e) {
@@ -40,6 +45,39 @@ class _SignInScreenState extends State<SignInScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    String? hint,
+    Widget? suffix,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      labelStyle: tt.bodyMedium,
+      hintStyle: tt.bodyMedium?.copyWith(
+        color: cs.onSurface.withValues(alpha: .60),
+      ),
+      filled: true,
+      fillColor: cs.surface, // mantém o look antigo (clean)
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: cs.outline.withValues(alpha: .50), width: 1),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: cs.outline.withValues(alpha: .50), width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: cs.primary, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      suffixIcon: suffix,
+    );
   }
 
   @override
@@ -68,7 +106,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         Text(
                           'Entrar',
                           style: tt.headlineSmall?.copyWith(
-                            color: cs.onSurface, // trocado de onBackground -> onSurface
+                            color: cs.onSurface,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -76,7 +114,6 @@ class _SignInScreenState extends State<SignInScreen> {
                         Text(
                           'Bem-vindo de volta',
                           style: tt.bodyMedium?.copyWith(
-                            // .withOpacity(...) -> withValues(alpha: ...)
                             color: cs.onSurface.withValues(alpha: .70),
                           ),
                         ),
@@ -107,61 +144,32 @@ class _SignInScreenState extends State<SignInScreen> {
                             controller: _email,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
-                            decoration: InputDecoration(
-                              labelText: 'Email',
-                              labelStyle: tt.bodyMedium,
-                              hintText: 'nome@dominio.com',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: cs.outline),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: cs.primary, width: 2),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                            decoration: _inputDecoration(
+                              label: 'Email',
+                              hint: 'nome@dominio.com',
                             ),
                             validator: (v) =>
                                 (v == null || !v.contains('@')) ? 'Email inválido' : null,
                           ),
-
                           const SizedBox(height: 16),
-
                           TextFormField(
                             controller: _password,
                             obscureText: _obscure,
                             textInputAction: TextInputAction.done,
                             onFieldSubmitted: (_) => _submit(),
-                            decoration: InputDecoration(
-                              labelText: 'Palavra-passe',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: cs.outline),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: cs.primary, width: 2),
-                              ),
-                              suffixIcon: IconButton(
+                            decoration: _inputDecoration(
+                              label: 'Palavra-passe',
+                              suffix: IconButton(
                                 onPressed: () => setState(() => _obscure = !_obscure),
                                 icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                                 color: cs.outline,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
                             ),
                             validator: (v) =>
                                 (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
                           ),
 
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
 
                           Align(
                             alignment: Alignment.centerRight,
@@ -169,6 +177,8 @@ class _SignInScreenState extends State<SignInScreen> {
                               onPressed: () {/* TODO: recuperação */},
                               style: TextButton.styleFrom(
                                 foregroundColor: cs.secondary,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                textStyle: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                               ),
                               child: const Text('Esqueci-me da palavra-passe'),
                             ),
@@ -184,7 +194,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                 backgroundColor: cs.primary,
                                 foregroundColor: cs.onPrimary,
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 14, horizontal: 16),
+                                  vertical: 16, // ligeiro aumento
+                                  horizontal: 16,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(24),
                                 ),
@@ -199,8 +211,9 @@ class _SignInScreenState extends State<SignInScreen> {
                             ),
                           ),
 
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 14),
 
+                          // bloco inferior mais “equilibrado”
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -210,11 +223,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                   color: cs.onSurface.withValues(alpha: .80),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 10),
                               TextButton(
                                 onPressed: () => context.go('/signup'),
                                 style: TextButton.styleFrom(
                                   foregroundColor: cs.secondary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  textStyle: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                                 ),
                                 child: const Text('Criar conta'),
                               ),
