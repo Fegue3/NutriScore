@@ -30,6 +30,13 @@ enum Unit {
   PIECE
 }
 
+// ---------- ENUMS ----------
+enum Sex {
+  MALE
+  FEMALE
+  OTHER
+}
+
 // ---------- USERS ----------
 model User {
   id        String   @id @default(uuid())
@@ -41,7 +48,6 @@ model User {
   updatedAt DateTime @updatedAt
 
   // relações
-  preferences UserPreferences?
   goals       UserGoals?
   meals       Meal[] // dias/refeições
   mealItems   MealItem[] // se precisares de autorias
@@ -51,38 +57,34 @@ model User {
   favorites   FavoriteProduct[]
 }
 
-// ---------- USER SETTINGS ----------
-model UserPreferences {
-  userId String @id
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // ex: alertas / restrições
-  lowSalt    Boolean @default(false)
-  lowSugar   Boolean @default(false)
-  vegetarian Boolean @default(false)
-  vegan      Boolean @default(false)
-
-  // alergias / intolerâncias (texto simples por agora)
-  allergens String? // ex: "milk, peanuts"
-
-  // metas diárias base
-  dailyCalories  Int? // kcal alvo
-  carbPercent    Int? // 0..100
-  proteinPercent Int?
-  fatPercent     Int?
-  updatedAt      DateTime @updatedAt
-}
-
+// ---------- USER GOALS + PREFERENCES (fundidos) ----------
 model UserGoals {
   userId String @id
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // objetivo de peso e datas (opcional)
+  // Biometrics / perfil (para IMC e necessidades calóricas)
+  sex           Sex?
+  dateOfBirth   DateTime?     // calcular idade
+  heightCm      Int?          // altura em cm
   currentWeightKg Decimal?  @db.Decimal(5, 2)
   targetWeightKg  Decimal?  @db.Decimal(5, 2)
   targetDate      DateTime?
-  activityLevel   String? // ex: "sedentary", "light", etc.
-  updatedAt       DateTime  @updatedAt
+  activityLevel   String?      // "sedentary", "light", etc.
+
+  // Preferências / restrições alimentares
+  lowSalt     Boolean @default(false)
+  lowSugar    Boolean @default(false)
+  vegetarian  Boolean @default(false)
+  vegan       Boolean @default(false)
+  allergens   String?          // ex: "milk, peanuts"
+
+  // Metas diárias base
+  dailyCalories  Int?          // kcal alvo
+  carbPercent    Int?          // 0..100
+  proteinPercent Int?          // 0..100
+  fatPercent     Int?          // 0..100
+
+  updatedAt      DateTime @updatedAt
 }
 
 // ---------- PRODUCT (cache OFF) ----------
