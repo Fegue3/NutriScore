@@ -1,4 +1,4 @@
-// data/auth_api.dart
+// lib/data/auth_api.dart
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
@@ -14,9 +14,9 @@ class AuthApi {
     const fromEnv = String.fromEnvironment('BACKEND_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
 
-    if (kIsWeb) return 'http://localhost:3000';        // web (dev)
+    if (kIsWeb) return 'http://localhost:3000';            // web (dev)
     if (Platform.isAndroid) return 'http://10.0.2.2:3000'; // emulador Android
-    return 'http://localhost:3000';                     // iOS simulator / desktop
+    return 'http://localhost:3000';                         // iOS simulator / desktop
   }
 
   final Dio _dio = Dio(
@@ -37,8 +37,10 @@ class AuthApi {
     }
   }
 
-  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})>
-      signIn({required String email, required String password}) async {
+  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})> signIn({
+    required String email,
+    required String password,
+  }) async {
     try {
       final res = await _dio.post('/auth/login', data: {
         'email': email,
@@ -65,14 +67,17 @@ class AuthApi {
           ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
           : (e.message ?? 'Erro de rede');
       final code = e.response?.statusCode;
-      final type = e.type; // connectTimeout, badResponse, connectionError, etc.
+      final type = e.type;
       final url = e.requestOptions.uri.toString();
       throw 'Falha no login: $msg (type=$type, code=$code, url=$url)';
     }
   }
 
-  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})>
-      signUp({required String email, required String password, String? name}) async {
+  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})> signUp({
+    required String email,
+    required String password,
+    String? name,
+  }) async {
     try {
       final res = await _dio.post('/auth/register', data: {
         'email': email,
@@ -103,6 +108,59 @@ class AuthApi {
       final type = e.type;
       final url = e.requestOptions.uri.toString();
       throw 'Falha no registo: $msg (type=$type, code=$code, url=$url)';
+    }
+  }
+
+  /// Upsert das metas/perfil do utilizador (usa o token já injetado).
+  /// Envia apenas os campos que passares.
+  Future<void> upsertGoals({
+    String? sex,                 // "MALE" | "FEMALE" | "OTHER"
+    int? heightCm,
+    double? currentWeightKg,
+    double? targetWeightKg,
+    String? activityLevel,       // "sedentary" | "light" | "moderate" | "active" | "very_active"
+    int? dailyCalories,
+    int? carbPercent,
+    int? proteinPercent,
+    int? fatPercent,
+    bool? lowSalt,
+    bool? lowSugar,
+    bool? vegetarian,
+    bool? vegan,
+    String? allergens,
+    DateTime? dateOfBirth,
+    DateTime? targetDate,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        if (sex != null) 'sex': sex,
+        if (heightCm != null) 'heightCm': heightCm,
+        if (currentWeightKg != null) 'currentWeightKg': currentWeightKg,
+        if (targetWeightKg != null) 'targetWeightKg': targetWeightKg,
+        if (activityLevel != null) 'activityLevel': activityLevel,
+        if (dailyCalories != null) 'dailyCalories': dailyCalories,
+        if (carbPercent != null) 'carbPercent': carbPercent,
+        if (proteinPercent != null) 'proteinPercent': proteinPercent,
+        if (fatPercent != null) 'fatPercent': fatPercent,
+        if (lowSalt != null) 'lowSalt': lowSalt,
+        if (lowSugar != null) 'lowSugar': lowSugar,
+        if (vegetarian != null) 'vegetarian': vegetarian,
+        if (vegan != null) 'vegan': vegan,
+        if (allergens != null) 'allergens': allergens,
+        if (dateOfBirth != null) 'dateOfBirth': dateOfBirth.toIso8601String(),
+        if (targetDate != null) 'targetDate': targetDate.toIso8601String(),
+      };
+
+      final res = await _dio.put('/api/me/goals', data: payload);
+      if (res.statusCode != 200) {
+        throw 'Falha ao guardar metas (HTTP ${res.statusCode})';
+      }
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? ((e.response!.data['error'] ?? e.response!.data['message'] ?? e.message) as Object?).toString()
+          : (e.message ?? 'Erro de rede');
+      final code = e.response?.statusCode;
+      throw 'Erro ao guardar metas: $msg (code=$code)';
     }
   }
 }
