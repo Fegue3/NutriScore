@@ -36,12 +36,17 @@ class _SignInScreenState extends State<SignInScreen> {
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       );
-      if (mounted) context.go('/dashboard');
+      if (!mounted) return;
+      if (di.authRepository.onboardingCompleted) {
+        context.go('/dashboard');
+      } else {
+        context.go('/onboarding');
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Falha no login: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Falha no login: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -65,11 +70,17 @@ class _SignInScreenState extends State<SignInScreen> {
       fillColor: cs.surface, // mantém o look antigo (clean)
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: cs.outline.withValues(alpha: .50), width: 1),
+        borderSide: BorderSide(
+          color: cs.outline.withValues(alpha: .50),
+          width: 1,
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: cs.outline.withValues(alpha: .50), width: 1),
+        borderSide: BorderSide(
+          color: cs.outline.withValues(alpha: .50),
+          width: 1,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -101,7 +112,11 @@ class _SignInScreenState extends State<SignInScreen> {
                     padding: const EdgeInsets.only(bottom: 24),
                     child: Column(
                       children: [
-                        Image.asset('assets/utils/icon.png', width: 256, height: 256),
+                        Image.asset(
+                          'assets/utils/icon.png',
+                          width: 256,
+                          height: 256,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           'Entrar',
@@ -148,8 +163,9 @@ class _SignInScreenState extends State<SignInScreen> {
                               label: 'Email',
                               hint: 'nome@dominio.com',
                             ),
-                            validator: (v) =>
-                                (v == null || !v.contains('@')) ? 'Email inválido' : null,
+                            validator: (v) => (v == null || !v.contains('@'))
+                                ? 'Email inválido'
+                                : null,
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
@@ -160,13 +176,19 @@ class _SignInScreenState extends State<SignInScreen> {
                             decoration: _inputDecoration(
                               label: 'Palavra-passe',
                               suffix: IconButton(
-                                onPressed: () => setState(() => _obscure = !_obscure),
-                                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
+                                icon: Icon(
+                                  _obscure
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
                                 color: cs.outline,
                               ),
                             ),
-                            validator: (v) =>
-                                (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
+                            validator: (v) => (v == null || v.length < 6)
+                                ? 'Mínimo 6 caracteres'
+                                : null,
                           ),
 
                           const SizedBox(height: 10),
@@ -174,11 +196,18 @@ class _SignInScreenState extends State<SignInScreen> {
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () {/* TODO: recuperação */},
+                              onPressed: () {
+                                /* TODO: recuperação */
+                              },
                               style: TextButton.styleFrom(
                                 foregroundColor: cs.secondary,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                textStyle: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
+                                ),
+                                textStyle: tt.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               child: const Text('Esqueci-me da palavra-passe'),
                             ),
@@ -205,7 +234,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ? const SizedBox(
                                       width: 18,
                                       height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : const Text('Entrar'),
                             ),
@@ -228,8 +259,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                 onPressed: () => context.go('/signup'),
                                 style: TextButton.styleFrom(
                                   foregroundColor: cs.secondary,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  textStyle: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  textStyle: tt.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 child: const Text('Criar conta'),
                               ),
