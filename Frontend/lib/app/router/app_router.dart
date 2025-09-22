@@ -22,21 +22,40 @@ final GoRouter appRouter = GoRouter(
   initialLocation: '/',
   refreshListenable: _AuthRefresh(),
   redirect: (context, state) {
-    final logged = di.authRepository.isLoggedIn;
+    final logged      = di.authRepository.isLoggedIn;
+    final loggingOut  = di.authRepository.isLoggingOut;
+    final pending     = logged && !di.authRepository.onboardingCompleted;
+
     final loc = state.matchedLocation;
+    final isAuthRoute  = loc == '/' || loc == '/login' || loc == '/signup';
+    final isOnboarding = loc == '/onboarding';
 
-    final isAuthRoute = loc == '/' || loc == '/login' || loc == '/signup';
+    // não autenticado
+    if (!logged) {
+      if (isOnboarding) return '/signup';
+      if (!isAuthRoute) return '/';
+      return null;
+    }
 
-    if (!logged && !isAuthRoute) return '/';
-    if (logged && isAuthRoute) return '/dashboard';
+    // autenticado, mas ainda não concluiu onboarding → força onboarding
+    if (pending && !isOnboarding) return '/onboarding';
+
+    // autenticado e já concluiu, evita voltar ao hub/login/signup
+    if (!pending && isAuthRoute && !loggingOut) return '/dashboard';
+
     return null;
   },
   routes: [
     // públicas
-    GoRoute(path: '/', builder: (_, __) => const AuthHubScreen()),
+    GoRoute(path: '/',      builder: (_, __) => const AuthHubScreen()),
     GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
-    GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
-    GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
+    GoRoute(path: '/signup',builder: (_, __) => const SignUpScreen()),
+    GoRoute(
+      path: '/onboarding',
+      builder: (_, __) => OnboardingScreen(
+        authRepository: di.authRepository, // sem const
+      ),
+    ),
 
     // full screen fora do shell
     GoRoute(
