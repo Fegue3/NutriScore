@@ -72,4 +72,12 @@ export class AuthService {
   async logout(userId: string) {
     await this.users.updateRefreshHash(userId, null).catch(() => {});
   }
+
+  /**
+   * Apaga a própria conta, revoga refresh tokens e deixa o access token expirar naturalmente.
+   */
+  async deleteSelf(userId: string) {
+    await this.users.deleteUserCascade(userId);
+    return { ok: true };
+  }
 }
