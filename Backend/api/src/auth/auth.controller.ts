@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards, Req, Dele
 import { AuthService } from './auth.service';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { AccessTokenGuard, RefreshTokenGuard } from './auth.guards';
+import { UsersService } from '../users/users.service';
 
 class RegisterDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; @IsString() @IsOptional() name?: string; }
 class LoginDto    { @IsEmail() email!: string; @IsString() password!: string; }
@@ -10,7 +11,10 @@ class LogoutDto   { @IsString() userId!: string; }
 
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(
+    private auth: AuthService,
+    private users: UsersService,
+  ) {}
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -39,9 +43,16 @@ export class AuthController {
 
   @UseGuards(AccessTokenGuard)
   @Get('me')
-  me(@Req() req: any) {
+  async me(@Req() req: any) {
     const u = req.user;
-    return { user: { id: u.sub, email: u.email } };
+    const dbUser = await this.users.findById(u.sub);
+    return {
+      user: {
+        id: u.sub,
+        email: u.email,
+        onboardingCompleted: !!dbUser?.onboardingCompleted,
+      },
+    };
   }
 
   @UseGuards(AccessTokenGuard)
@@ -52,9 +63,8 @@ export class AuthController {
     try {
       await this.auth.deleteSelf(userId);
     } catch {
-      // Mesmo que já tenha sido apagado, mantemos 204 para idempotência
+      // idempotente
     }
-    // Sem body
     return;
   }
 }
