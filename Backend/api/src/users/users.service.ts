@@ -28,7 +28,6 @@ export class UsersService {
 
     // Criar UserGoals vazio (falha silenciosa se já existir)
     await this.prisma.userGoals.create({ data: { userId: user.id } }).catch(() => {});
-
     return user;
   }
 
@@ -38,9 +37,8 @@ export class UsersService {
       data: { refreshTokenHash },
     });
   }
-  
+
   async deleteUserCascade(userId: string) {
-    // Opcional: limpar refresh hash antes (não é estritamente necessário, mas é “higiénico”)
     await this.prisma.user
       .update({
         where: { id: userId },
@@ -50,20 +48,35 @@ export class UsersService {
       .catch(() => {});
 
     try {
-      // Delete principal (respeita onDelete: Cascade definido no schema.prisma)
       await this.prisma.user.delete({ where: { id: userId } });
     } catch (err) {
-      // Se o registo não existir (P2025), tratamos como idempotente.
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === 'P2025'
       ) {
-        // ignore
+        // idempotente: já não existe
       } else {
         throw err;
       }
     }
+    return { ok: true };
+  }
 
+  // ---------------- Flags de onboarding ----------------
+  async getFlags(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardingCompleted: true },
+    });
+  }
+
+  async setFlags(userId: string, flags: { onboardingCompleted?: boolean }) {
+    const data: Record<string, any> = {};
+    if (typeof flags.onboardingCompleted === 'boolean') {
+      data.onboardingCompleted = flags.onboardingCompleted;
+    }
+    if (Object.keys(data).length === 0) return { ok: true };
+    await this.prisma.user.update({ where: { id: userId }, data });
     return { ok: true };
   }
 }
