@@ -26,7 +26,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _gender; // "MALE" | "FEMALE" | "OTHER"
   final _weight = TextEditingController();
   final _height = TextEditingController();
-  String? _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
+  String?
+  _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
 
   bool _submitting = false;
 
@@ -55,19 +56,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (_current == _Step.activity) {
       setState(() => _current = _Step.done);
-      _page.nextPage(duration: const Duration(milliseconds: 350), curve: Curves.easeOut);
+      _page.nextPage(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+      );
       await _finishAndGo();
       return;
     }
 
     setState(() => _current = _Step.values[_index + 1]);
-    _page.nextPage(duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic);
+    _page.nextPage(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   void _goBack() {
     if (_current == _Step.gender) return;
     setState(() => _current = _Step.values[_index - 1]);
-    _page.previousPage(duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic);
+    _page.previousPage(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   bool _validateStep() {
@@ -75,27 +85,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     switch (_current) {
       case _Step.gender:
         if (_gender == null) {
-          snack.showSnackBar(const SnackBar(content: Text('Escolhe o teu género.')));
+          snack.showSnackBar(
+            const SnackBar(content: Text('Escolhe o teu género.')),
+          );
           return false;
         }
         return true;
       case _Step.weight:
         final w = double.tryParse(_weight.text.replaceAll(',', '.'));
         if (w == null || w < 25 || w > 400) {
-          snack.showSnackBar(const SnackBar(content: Text('Indica um peso válido (kg).')));
+          snack.showSnackBar(
+            const SnackBar(content: Text('Indica um peso válido (kg).')),
+          );
           return false;
         }
         return true;
       case _Step.height:
         final h = int.tryParse(_height.text);
         if (h == null || h < 90 || h > 250) {
-          snack.showSnackBar(const SnackBar(content: Text('Indica uma altura válida (cm).')));
+          snack.showSnackBar(
+            const SnackBar(content: Text('Indica uma altura válida (cm).')),
+          );
           return false;
         }
         return true;
       case _Step.activity:
         if (_activity == null) {
-          snack.showSnackBar(const SnackBar(content: Text('Seleciona o teu nível de atividade.')));
+          snack.showSnackBar(
+            const SnackBar(
+              content: Text('Seleciona o teu nível de atividade.'),
+            ),
+          );
           return false;
         }
         return true;
@@ -119,13 +139,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return WillPopScope(
-      onWillPop: () async {
-        if (_current != _Step.gender && _current != _Step.done) {
-          _goBack();
-          return false; // recua passo em vez de sair
+    return PopScope(
+      canPop: _current == _Step.gender || _current == _Step.done,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _current != _Step.gender && _current != _Step.done) {
+          _goBack(); // recua passo em vez de sair
         }
-        return true;
       },
       child: Scaffold(
         backgroundColor: cs.surface,
@@ -153,7 +172,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 520),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: cs.surface,
@@ -165,7 +187,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               color: Color(0x14000000),
                             ),
                           ],
-                          border: Border.all(color: cs.outline.withValues(alpha: .25)),
+                          border: Border.all(
+                            color: cs.outline.withValues(alpha: .25),
+                          ),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -187,14 +211,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  if (_current != _Step.gender && _current != _Step.done)
+                                  if (_current != _Step.gender &&
+                                      _current != _Step.done)
                                     OutlinedButton(
                                       onPressed: _goBack,
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: cs.primary,
                                         side: BorderSide(color: cs.primary),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(24),
+                                          borderRadius: BorderRadius.circular(
+                                            24,
+                                          ),
                                         ),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 16,
@@ -213,14 +240,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                         backgroundColor: cs.primary,
                                         foregroundColor: cs.onPrimary,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(24),
+                                          borderRadius: BorderRadius.circular(
+                                            24,
+                                          ),
                                         ),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 22,
                                           vertical: 14,
                                         ),
                                       ),
-                                      child: Text(_current == _Step.activity ? 'Concluir' : 'Continuar'),
+                                      child: Text(
+                                        _current == _Step.activity
+                                            ? 'Concluir'
+                                            : 'Continuar',
+                                      ),
                                     ),
                                 ],
                               ),
@@ -256,7 +289,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       children: [
         Text(
           'Qual é o teu género?',
-          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -275,7 +311,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 12),
         Text(
           'Usamos isto apenas para calcular necessidades energéticas.',
-          style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: .70)),
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
         ),
       ],
     );
@@ -291,13 +329,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       children: [
         Text(
           'Qual é o teu peso?',
-          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _weight,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,\.]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9,\.]')),
+          ],
           decoration: InputDecoration(
             labelText: 'Peso (kg)',
             suffixText: 'kg',
@@ -315,13 +358,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: cs.primary, width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'Apenas números. Ex.: 72.5',
-          style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: .70)),
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
         ),
       ],
     );
@@ -337,7 +385,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       children: [
         Text(
           'Qual é a tua altura?',
-          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -361,13 +412,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: cs.primary, width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'Ex.: 178',
-          style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: .70)),
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
         ),
       ],
     );
@@ -383,13 +439,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       children: [
         Text(
           'Qual é o teu nível de atividade?',
-          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: _activity,
+          initialValue: _activity,
           items: _activities
-              .map((a) => DropdownMenuItem<String>(value: a.$1, child: Text(a.$2)))
+              .map(
+                (a) => DropdownMenuItem<String>(value: a.$1, child: Text(a.$2)),
+              )
               .toList(),
           onChanged: (v) => setState(() => _activity = v),
           decoration: InputDecoration(
@@ -408,13 +469,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: cs.primary, width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'Isto ajuda a estimar as calorias diárias recomendadas.',
-          style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: .70)),
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
         ),
       ],
     );
@@ -437,12 +503,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 12),
                   Text(
                     'Obrigado por te registares! 🎉',
-                    style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+                    style: tt.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'A preparar o teu dashboard…',
-                    style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: .70)),
+                    style: tt.bodyMedium?.copyWith(
+                      color: cs.onSurface.withValues(alpha: .70),
+                    ),
                   ),
                 ],
               )
@@ -454,12 +525,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 12),
                   Text(
                     'Tudo pronto! 🎯',
-                    style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+                    style: tt.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Vamos configurar o teu plano diário…',
-                    style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: .70)),
+                    style: tt.bodyMedium?.copyWith(
+                      color: cs.onSurface.withValues(alpha: .70),
+                    ),
                   ),
                 ],
               ),
@@ -492,12 +568,14 @@ class _SegmentedProgress extends StatelessWidget {
               height: 10,
               margin: EdgeInsets.only(right: i == total - 1 ? 0 : gap),
               decoration: BoxDecoration(
-                color: active ? cs.primary : cs.outlineVariant.withValues(alpha: .35),
+                color: active
+                    ? cs.primary
+                    : cs.outlineVariant.withValues(alpha: .35),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color: cs.primary.withOpacity(.35),
+                          color: cs.primary.withValues(alpha: .35),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -539,11 +617,13 @@ class _SelectableChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? cs.primary : cs.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? cs.primary : cs.outline.withValues(alpha: .45)),
+          border: Border.all(
+            color: selected ? cs.primary : cs.outline.withValues(alpha: .45),
+          ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: cs.primary.withOpacity(.28),
+                    color: cs.primary.withValues(alpha: .28),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
