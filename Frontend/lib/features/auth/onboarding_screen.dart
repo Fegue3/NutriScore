@@ -13,17 +13,22 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-enum _Step { gender, weight, height, activity, done }
+enum _Step { gender, birthdate, weight, targetWeight, height, activity, done }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _page = PageController();
   _Step _current = _Step.gender;
 
   String? _gender; // "MALE" | "FEMALE" | "OTHER"
+  DateTime? _dob; // data de nascimento
+  final _dobCtrl = TextEditingController();
+
   final _weight = TextEditingController();
+  final _targetWeight = TextEditingController();
   final _height = TextEditingController();
+
   String?
-  _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
+      _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
 
   bool _submitting = false;
 
@@ -38,7 +43,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _page.dispose();
+    _dobCtrl.dispose();
     _weight.dispose();
+    _targetWeight.dispose();
     _height.dispose();
     super.dispose();
   }
@@ -115,6 +122,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           return false;
         }
         return true;
+
+      case _Step.birthdate:
+        if (_dob == null) {
+          snack.showSnackBar(
+            const SnackBar(content: Text('Escolhe a tua data de nascimento.')),
+          );
+          return false;
+        }
+        // idade entre 10 e 120 anos
+        final now = DateTime.now();
+        final minDate = DateTime(now.year - 120, now.month, now.day);
+        final maxDate = DateTime(now.year - 10, now.month, now.day);
+        if (_dob!.isBefore(minDate) || _dob!.isAfter(maxDate)) {
+          snack.showSnackBar(
+            const SnackBar(
+              content: Text('Indica uma data de nascimento válida.'),
+            ),
+          );
+          return false;
+        }
+        return true;
+
       case _Step.weight:
         final w = double.tryParse(_weight.text.replaceAll(',', '.'));
         if (w == null || w < 25 || w > 400) {
@@ -124,6 +153,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           return false;
         }
         return true;
+
+      case _Step.targetWeight:
+        final tw = double.tryParse(_targetWeight.text.replaceAll(',', '.'));
+        if (tw == null || tw < 25 || tw > 400) {
+          snack.showSnackBar(
+            const SnackBar(content: Text('Define um peso alvo válido (kg).')),
+          );
+          return false;
+        }
+        return true;
+
       case _Step.height:
         final h = int.tryParse(_height.text);
         if (h == null || h < 90 || h > 250) {
@@ -133,6 +173,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           return false;
         }
         return true;
+
       case _Step.activity:
         if (_activity == null) {
           snack.showSnackBar(
@@ -143,6 +184,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           return false;
         }
         return true;
+
       case _Step.done:
         return true;
     }
@@ -155,10 +197,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // 1) Tenta guardar metas (se falhar, seguimos — não é bloqueante)
     try {
       final double? w = double.tryParse(_weight.text.replaceAll(',', '.'));
+      final double? tw =
+          double.tryParse(_targetWeight.text.replaceAll(',', '.'));
       final int? h = int.tryParse(_height.text);
       await AuthApi.I.upsertGoals(
         sex: _gender,
+        dateOfBirth: _dob,
         currentWeightKg: w,
+        targetWeightKg: tw,
         heightCm: h,
         activityLevel: _activity,
       );
@@ -267,7 +313,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   physics: const NeverScrollableScrollPhysics(),
                                   children: [
                                     _buildGenderStep(context),
+                                    _buildBirthdateStep(context),
                                     _buildWeightStep(context),
+                                    _buildTargetWeightStep(context),
                                     _buildHeightStep(context),
                                     _buildActivityStep(context),
                                     _buildDoneStep(context),
@@ -339,6 +387,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  // -------- Helpers --------
+  String _formatDate(DateTime d) {
+    final day = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    final year = d.year.toString();
+    return '$day/$month/$year';
+  }
+
+  Future<void> _pickBirthdate() async {
+    final now = DateTime.now();
+    final first = DateTime(now.year - 120, now.month, now.day);
+    final last = DateTime(now.year - 10, now.month, now.day);
+
+    final initial = _dob != null
+        ? _dob!
+        : DateTime(now.year - 25, now.month, now.day); // default ~25 anos
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(first) || initial.isAfter(last)
+          ? last
+          : initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: 'Seleciona a tua data de nascimento',
+      cancelText: 'Cancelar',
+      confirmText: 'OK',
+    );
+    if (picked != null) {
+      setState(() {
+        _dob = DateTime(picked.year, picked.month, picked.day);
+        _dobCtrl.text = _formatDate(_dob!);
+      });
+    }
+  }
+
   // -------- UI dos passos --------
   Widget _buildGenderStep(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -376,6 +460,58 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 12),
         Text(
           'Usamos isto apenas para calcular necessidades energéticas.',
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBirthdateStep(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Qual é a tua data de nascimento?',
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _dobCtrl,
+          readOnly: true,
+          onTap: _pickBirthdate,
+          decoration: InputDecoration(
+            labelText: 'Data de nascimento',
+            hintText: 'DD/MM/AAAA',
+            suffixIcon: const Icon(Icons.calendar_today_rounded),
+            filled: true,
+            fillColor: cs.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.outline.withValues(alpha: .50)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.outline.withValues(alpha: .50)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.primary, width: 2),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Isto ajuda a estimar o teu metabolismo basal.',
           style: tt.bodyMedium?.copyWith(
             color: cs.onSurface.withValues(alpha: .70),
           ),
@@ -431,6 +567,61 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 8),
         Text(
           'Apenas números. Ex.: 72.5',
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTargetWeightStep(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Qual é o teu peso alvo?',
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _targetWeight,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9,\.]')),
+          ],
+          decoration: InputDecoration(
+            labelText: 'Peso alvo (kg)',
+            suffixText: 'kg',
+            filled: true,
+            fillColor: cs.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.outline.withValues(alpha: .50)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.outline.withValues(alpha: .50)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.primary, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Define um objetivo realista. Ex.: 68.0',
           style: tt.bodyMedium?.copyWith(
             color: cs.onSurface.withValues(alpha: .70),
           ),
