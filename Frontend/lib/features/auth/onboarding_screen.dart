@@ -1,16 +1,13 @@
-// lib/features/auth/onboarding_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-
-/// Onboarding com 4 passos:
-/// 1) Género  2) Peso (kg)  3) Altura (cm)  4) Nível de atividade (combo)
-/// Depois mostra "Obrigado" e navega para /dashboard após ~3.8s.
-/// Usa apenas Theme (sem cores hardcoded) e uma progress bar segmentada.
+import '../../data/repositories/auth_repository.dart';
+import '../../data/auth_api.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({super.key, required this.authRepository});
+  final AuthRepository authRepository;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -22,7 +19,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _page = PageController();
   _Step _current = _Step.gender;
 
-  // respostas
   String? _gender; // "MALE" | "FEMALE" | "OTHER"
   final _weight = TextEditingController();
   final _height = TextEditingController();
@@ -47,9 +43,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
+  // --------- Fluxo de cancelamento no 1º passo ---------
+  Future<void> _cancelAndDelete() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+
+    try {
+      await widget.authRepository.deleteAccount(); // DELETE /auth/me
+    } catch (_) {}
+
+    try {
+      await widget.authRepository.logout(); // limpa tokens/estado local
+    } catch (_) {}
+
+    if (!mounted) return;
+    context.go('/signup');
+  }
+
   // -------- Navegação dos passos --------
   int get _index => _current.index;
-  int get _total => _Step.done.index; // 4 passos úteis
+  int get _total => _Step.done.index;
 
   void _goNext() async {
     if (!_validateStep()) return;
@@ -63,7 +76,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _finishAndGo();
       return;
     }
-
     setState(() => _current = _Step.values[_index + 1]);
     _page.nextPage(
       duration: const Duration(milliseconds: 250),
@@ -72,7 +84,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goBack() {
-    if (_current == _Step.gender) return;
+    if (_current == _Step.gender) {
+      _cancelAndDelete(); // apaga + logout + volta ao signup
+      return;
+    }
+    if (_current == _Step.done) {
+      if (_submitting) return;
+      setState(() => _current = _Step.activity);
+      _page.previousPage(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
     setState(() => _current = _Step.values[_index - 1]);
     _page.previousPage(
       duration: const Duration(milliseconds: 250),
@@ -128,9 +152,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_submitting) return;
     setState(() => _submitting = true);
 
-    // TODO: enviar para a API (update profile) se precisares.
+    // 1) Tenta guardar metas (se falhar, seguimos — não é bloqueante)
+    try {
+      final double? w = double.tryParse(_weight.text.replaceAll(',', '.'));
+      final int? h = int.tryParse(_height.text);
+      await AuthApi.I.upsertGoals(
+        sex: _gender,
+        currentWeightKg: w,
+        heightCm: h,
+        activityLevel: _activity,
+      );
+    } catch (_) {
+      // opcional: log / snackbar “não foi possível guardar metas, tentamos mais tarde”
+    }
 
-    await Future.delayed(const Duration(milliseconds: 3800));
+    // 2) Marca onboarding concluído (isto é BLOQUEANTE para sair daqui)
+    bool ok = false;
+    try {
+      await AuthApi.I.setOnboardingCompleted(true);
+      widget.authRepository.setOnboardingCompleted(true);
+      ok = true;
+    } catch (e) {
+      ok = false;
+    }
+
+    if (!mounted) return;
+
+    if (!ok) {
+      // Não conseguimos marcar o flag → não navegamos porque o router vai forçar /onboarding
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível concluir o onboarding. Tenta novamente.',
+          ),
+        ),
+      );
+      // volta uma página para o utilizador poder “Concluir” outra vez
+      setState(() => _current = _Step.activity);
+      _page.previousPage(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
+    // 3) Pequena animação e segue para o dashboard
+    await Future.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
     context.go('/dashboard');
   }
@@ -140,11 +208,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return PopScope(
-      canPop: _current == _Step.gender || _current == _Step.done,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _current != _Step.gender && _current != _Step.done) {
-          _goBack(); // recua passo em vez de sair
-        }
+      canPop: false, // intercepta sempre back do sistema
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _goBack();
       },
       child: Scaffold(
         backgroundColor: cs.surface,
@@ -153,12 +220,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           backgroundColor: cs.surface,
           surfaceTintColor: cs.surface,
           elevation: 0,
-          leading: (_current != _Step.gender && _current != _Step.done)
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: _goBack,
-                )
-              : null,
+          // 👉 seta de voltar SEMPRE visível
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: (_current == _Step.done && _submitting) ? null : _goBack,
+          ),
         ),
         body: SafeArea(
           child: Column(
@@ -273,11 +339,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // -------- Passo 1: Género --------
+  // -------- UI dos passos --------
   Widget _buildGenderStep(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-
     final chips = [
       ('MALE', 'Masculino', Icons.male_rounded),
       ('FEMALE', 'Feminino', Icons.female_rounded),
@@ -319,7 +384,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // -------- Passo 2: Peso --------
   Widget _buildWeightStep(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -375,7 +439,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // -------- Passo 3: Altura --------
   Widget _buildHeightStep(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -429,7 +492,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // -------- Passo 4: Atividade --------
   Widget _buildActivityStep(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -486,7 +548,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // -------- Passo final: Obrigado --------
   Widget _buildDoneStep(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -545,10 +606,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 // ================== Widgets de UI ==================
-
 class _SegmentedProgress extends StatelessWidget {
   const _SegmentedProgress({required this.currentIndex, required this.total});
-
   final int currentIndex;
   final int total;
 
@@ -597,7 +656,6 @@ class _SelectableChip extends StatelessWidget {
     required this.icon,
     required this.onTap,
   });
-
   final bool selected;
   final String label;
   final IconData icon;
