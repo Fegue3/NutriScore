@@ -85,21 +85,22 @@ class AuthApi {
     }
   }
 
-  /// DELETE /auth/me — apaga a conta atual (idempotente: 204/200/401/404 são aceites).
+  /// DELETE /auth/me — apaga a conta atual (idempotente: 204/200/404 são aceites).
   Future<void> deleteAccount() async {
-  final token = await AuthStorage.I.readAccessToken();
-  if (token == null || token.isEmpty) {
-    throw 'Sem access token para apagar conta';
+    final token = await AuthStorage.I.readAccessToken();
+    if (token == null || token.isEmpty) {
+      throw 'Sem access token para apagar conta';
+    }
+    final res = await _dio.delete(
+      '/auth/me',
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
+    if (res.statusCode != 204 && res.statusCode != 200 && res.statusCode != 404) {
+      throw 'Falha ao apagar conta (HTTP ${res.statusCode})';
+    }
   }
-  final res = await _dio.delete(
-    '/auth/me',
-    options: Options(headers: {'Authorization': 'Bearer $token'}),
-  );
-  if (res.statusCode != 204 && res.statusCode != 200 && res.statusCode != 404) {
-    throw 'Falha ao apagar conta (HTTP ${res.statusCode})';
-  }
-}
-  /// Upsert de metas/perfil do utilizador (token já injetado via setAccessToken()).
+
+  /// Upsert metas/perfil
   Future<void> upsertGoals({
     String? sex,
     int? heightCm,
@@ -138,7 +139,8 @@ class AuthApi {
         if (targetDate != null) 'targetDate': targetDate.toIso8601String(),
       };
 
-      final res = await _dio.put('/me/goals', data: payload);
+      // 👇 path certo do backend Nest
+      final res = await _dio.put('/api/me/goals', data: payload);
       if (res.statusCode != 200) {
         throw 'Falha ao guardar metas (HTTP ${res.statusCode})';
       }
@@ -150,4 +152,23 @@ class AuthApi {
       throw 'Erro ao guardar metas: $msg (code=$code)';
     }
   }
+
+  // -------- Flags de onboarding --------
+  Future<bool> getOnboardingCompleted() async {
+    final res = await _dio.get('/api/me/flags');
+    final v = res.data?['flags']?['onboardingCompleted'];
+    return v == true;
+  }
+
+  Future<void> setOnboardingCompleted(bool value) async {
+  try {
+    final res = await _dio.patch('/api/me/flags', data: {'onboardingCompleted': value});
+    if (res.statusCode != 200) throw 'HTTP ${res.statusCode}';
+  } on DioException catch (e) {
+    final status = e.response?.statusCode;
+    final body = e.response?.data;
+    throw 'PATCH /api/me/flags falhou (status=$status, body=$body)';
+  }
+}
+
 }
