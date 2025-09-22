@@ -1,22 +1,19 @@
-// lib/data/auth_api.dart
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
+import 'auth_storage.dart';
 
 class AuthApi {
   AuthApi._();
   static final AuthApi I = AuthApi._();
 
-  /// Define o host automaticamente consoante o alvo.
-  /// Pode ser sobrescrito via:
-  ///   flutter run --dart-define=BACKEND_URL=http://IP:3000
   static String get baseUrl {
     const fromEnv = String.fromEnvironment('BACKEND_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
 
-    if (kIsWeb) return 'http://localhost:3000';            // web (dev)
-    if (Platform.isAndroid) return 'http://10.0.2.2:3000'; // emulador Android
-    return 'http://localhost:3000';                         // iOS simulator / desktop
+    if (kIsWeb) return 'http://localhost:3000';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3000';
+    return 'http://localhost:3000';
   }
 
   final Dio _dio = Dio(
@@ -28,7 +25,6 @@ class AuthApi {
     ),
   );
 
-  /// Injeta/remover o header Authorization conforme existir token.
   void setAccessToken(String? token) {
     if (token == null || token.isEmpty) {
       _dio.options.headers.remove('Authorization');
@@ -42,26 +38,13 @@ class AuthApi {
     required String password,
   }) async {
     try {
-      final res = await _dio.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
-
+      final res = await _dio.post('/auth/login', data: {'email': email, 'password': password});
       final data = res.data as Map<String, dynamic>;
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
-      final access = (tokens['accessToken'] as String?) ??
-          (tokens['access_token'] as String?) ??
-          '';
-      final refresh = (tokens['refreshToken'] as String?) ??
-          (tokens['refresh_token'] as String?) ??
-          '';
-
+      final access = (tokens['accessToken'] as String?) ?? (tokens['access_token'] as String?) ?? '';
+      final refresh = (tokens['refreshToken'] as String?) ?? (tokens['refresh_token'] as String?) ?? '';
       if (access.isEmpty) throw 'Access token não recebido';
-      return (
-        accessToken: access,
-        refreshToken: refresh,
-        user: (data['user'] ?? {}) as Map<String, dynamic>,
-      );
+      return (accessToken: access, refreshToken: refresh, user: (data['user'] ?? {}) as Map<String, dynamic>);
     } on DioException catch (e) {
       final msg = e.response?.data is Map
           ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
@@ -87,19 +70,10 @@ class AuthApi {
 
       final data = res.data as Map<String, dynamic>;
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
-      final access = (tokens['accessToken'] as String?) ??
-          (tokens['access_token'] as String?) ??
-          '';
-      final refresh = (tokens['refreshToken'] as String?) ??
-          (tokens['refresh_token'] as String?) ??
-          '';
-
+      final access = (tokens['accessToken'] as String?) ?? (tokens['access_token'] as String?) ?? '';
+      final refresh = (tokens['refreshToken'] as String?) ?? (tokens['refresh_token'] as String?) ?? '';
       if (access.isEmpty) throw 'Access token não recebido';
-      return (
-        accessToken: access,
-        refreshToken: refresh,
-        user: (data['user'] ?? {}) as Map<String, dynamic>,
-      );
+      return (accessToken: access, refreshToken: refresh, user: (data['user'] ?? {}) as Map<String, dynamic>);
     } on DioException catch (e) {
       final msg = e.response?.data is Map
           ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
@@ -111,14 +85,27 @@ class AuthApi {
     }
   }
 
-  /// Upsert das metas/perfil do utilizador (usa o token já injetado).
-  /// Envia apenas os campos que passares.
+  /// DELETE /auth/me — apaga a conta atual (idempotente: 204/200/401/404 são aceites).
+  Future<void> deleteAccount() async {
+  final token = await AuthStorage.I.readAccessToken();
+  if (token == null || token.isEmpty) {
+    throw 'Sem access token para apagar conta';
+  }
+  final res = await _dio.delete(
+    '/auth/me',
+    options: Options(headers: {'Authorization': 'Bearer $token'}),
+  );
+  if (res.statusCode != 204 && res.statusCode != 200 && res.statusCode != 404) {
+    throw 'Falha ao apagar conta (HTTP ${res.statusCode})';
+  }
+}
+  /// Upsert de metas/perfil do utilizador (token já injetado via setAccessToken()).
   Future<void> upsertGoals({
-    String? sex,                 // "MALE" | "FEMALE" | "OTHER"
+    String? sex,
     int? heightCm,
     double? currentWeightKg,
     double? targetWeightKg,
-    String? activityLevel,       // "sedentary" | "light" | "moderate" | "active" | "very_active"
+    String? activityLevel,
     int? dailyCalories,
     int? carbPercent,
     int? proteinPercent,
@@ -151,7 +138,7 @@ class AuthApi {
         if (targetDate != null) 'targetDate': targetDate.toIso8601String(),
       };
 
-      final res = await _dio.put('/api/me/goals', data: payload);
+      final res = await _dio.put('/me/goals', data: payload);
       if (res.statusCode != 200) {
         throw 'Falha ao guardar metas (HTTP ${res.statusCode})';
       }
