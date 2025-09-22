@@ -78,6 +78,5 @@ export class AuthService {
    */
   async deleteSelf(userId: string) {
     await this.users.deleteUserCascade(userId);
-    return { ok: true };
   }
 }
