@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards, Req, Delete } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { AccessTokenGuard, RefreshTokenGuard } from './auth.guards';
@@ -12,17 +12,49 @@ class LogoutDto   { @IsString() userId!: string; }
 export class AuthController {
   constructor(private auth: AuthService) {}
 
-  @Post('register') register(@Body() dto: RegisterDto) { return this.auth.register(dto.email, dto.password, dto.name); }
+  @Post('register')
+  register(@Body() dto: RegisterDto) {
+    return this.auth.register(dto.email, dto.password, dto.name);
+  }
 
-  @Post('login') @HttpCode(HttpStatus.OK) login(@Body() dto: LoginDto) { return this.auth.login(dto.email, dto.password); }
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  login(@Body() dto: LoginDto) {
+    return this.auth.login(dto.email, dto.password);
+  }
 
   @UseGuards(RefreshTokenGuard)
-  @Post('refresh') @HttpCode(HttpStatus.OK)
-  refresh(@Req() req: any, @Body() _dto: RefreshDto) { return this.auth.rotateRefresh(req.user.sub, req.user.email, req.user.refreshToken); }
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(@Req() req: any, @Body() _dto: RefreshDto) {
+    return this.auth.rotateRefresh(req.user.sub, req.user.email, req.user.refreshToken);
+  }
 
-  @Post('logout') @HttpCode(HttpStatus.OK)
-  async logout(@Body() dto: LogoutDto) { await this.auth.logout(dto.userId); return { ok: true }; }
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(@Body() dto: LogoutDto) {
+    await this.auth.logout(dto.userId);
+    return { ok: true };
+  }
 
   @UseGuards(AccessTokenGuard)
-  @Get('me') me(@Req() req: any) { const u = req.user; return { user: { id: u.sub, email: u.email } }; }
+  @Get('me')
+  me(@Req() req: any) {
+    const u = req.user;
+    return { user: { id: u.sub, email: u.email } };
+  }
+
+  @UseGuards(AccessTokenGuard)
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteMe(@Req() req: any) {
+    const userId = req.user.sub as string;
+    try {
+      await this.auth.deleteSelf(userId);
+    } catch {
+      // Mesmo que já tenha sido apagado, mantemos 204 para idempotência
+    }
+    // Sem body
+    return;
+  }
 }
