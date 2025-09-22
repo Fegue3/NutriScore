@@ -12,7 +12,7 @@ import { JwtAccessStrategy, JwtRefreshStrategy } from './auth.strategies';
     UsersModule,
     PrismaModule,
     PassportModule,
-    JwtModule.register({}), // vamos passar secret/ttl por chamada
+    JwtModule.register({}),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtAccessStrategy, JwtRefreshStrategy],
