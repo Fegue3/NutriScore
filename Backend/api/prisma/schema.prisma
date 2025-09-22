@@ -46,6 +46,7 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  onboardingCompleted Boolean @default(false)
 
   // relações
   goals       UserGoals?
