@@ -6,6 +6,7 @@ import 'core/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
+  await di.authRepository.bootstrap();
   runApp(const NutriScoreApp());
 }
 
