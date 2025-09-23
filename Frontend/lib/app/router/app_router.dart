@@ -21,8 +21,6 @@ class _AuthRefresh extends ChangeNotifier {
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
-  // 🔧 IMPORTANTE: agora o router refresca com authStateChanges **e**
-  // com o "tick" emitido quando muda o onboardingCompleted/bootstrap/etc.
   refreshListenable: Listenable.merge([
     _AuthRefresh(),
     di.authRepository.routerRefresh, // <— novo
