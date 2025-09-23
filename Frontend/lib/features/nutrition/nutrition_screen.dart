@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+// ⬇️ usa o CalorieApi que lê o token do AuthStorage automaticamente
+import '../../data/calorie_api.dart'; // <-- ajusta o caminho conforme o teu projeto
+
 class NutritionScreen extends StatefulWidget {
   const NutritionScreen({super.key});
   @override
@@ -9,11 +12,11 @@ class NutritionScreen extends StatefulWidget {
 
 class _NutritionScreenState extends State<NutritionScreen> {
   // ===== Estado de navegação por dia =====
-  int _dayOffset = 0;   // 0=Hoje, -1=Ontem, 1=Amanhã…
-  int _slideDir = 0;    // -1 esquerda→direita, +1 direita→esquerda
+  int _dayOffset = 0; // 0=Hoje, -1=Ontem, 1=Amanhã…
+  int _slideDir = 0; // -1 esquerda→direita, +1 direita→esquerda
 
-  // ===== Calorias =====
-  final int _dailyGoal = 2200; // Meta diária (podes puxar do perfil)
+  // ===== Calorias (local) =====
+  final int _fallbackDailyGoal = 2200; // Meta fallback (até vir do backend)
   final Map<String, int> _mealCalories = {
     "Pequeno-almoço": 0,
     "Almoço": 0,
@@ -21,8 +24,48 @@ class _NutritionScreenState extends State<NutritionScreen> {
     "Jantar": 0,
   };
 
-  int get _consumed =>
+  // ===== Calorias (vindas do backend) =====
+  int? _dailyGoalFromApi;
+  int? _consumedFromApi;
+  bool _loading = false;
+  String? _error;
+
+  int get _localConsumed =>
       _mealCalories.values.fold<int>(0, (sum, v) => sum + v);
+
+  int get _goal => _dailyGoalFromApi ?? _fallbackDailyGoal;
+  int get _consumed => _consumedFromApi ?? _localConsumed;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchForOffset(0);
+  }
+
+  Future<void> _fetchForOffset(int offset) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final date = DateTime.now().add(Duration(days: offset));
+      final result = await CalorieApi.I.getDaily(
+        date: offset == 0 ? null : date,
+      );
+      if (!mounted) return;
+      setState(() {
+        _dailyGoalFromApi = result.targetCalories;
+        _consumedFromApi = result.consumedCalories;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Falha ao carregar calorias: $e';
+        _loading = false;
+      });
+    }
+  }
 
   String _labelFor(BuildContext ctx, int off) {
     if (off == 0) return "Hoje";
@@ -38,6 +81,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
       _slideDir = delta > 0 ? 1 : -1;
       _dayOffset += delta;
     });
+    _fetchForOffset(_dayOffset);
   }
 
   // Disponível quando integrares o fluxo “Adicionar alimento”
@@ -61,6 +105,26 @@ class _NutritionScreenState extends State<NutritionScreen> {
           "Diário das Calorias",
           style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          if (_loading)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: cs.primary,
+                ),
+              ),
+            ),
+          if (_error != null)
+            IconButton(
+              onPressed: () => _fetchForOffset(_dayOffset),
+              tooltip: 'Tentar de novo',
+              icon: Icon(Icons.refresh, color: cs.error),
+            ),
+        ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: FloatingActionButton(
@@ -90,7 +154,8 @@ class _NutritionScreenState extends State<NutritionScreen> {
                     child: Row(
                       children: [
                         SizedBox(
-                          width: 48, height: 40,
+                          width: 48,
+                          height: 40,
                           child: _ArrowBtn(
                             icon: Icons.chevron_left_rounded,
                             onTap: () => _go(-1),
@@ -105,29 +170,42 @@ class _NutritionScreenState extends State<NutritionScreen> {
                               final begin = Offset((_slideDir) * 0.25, 0);
                               return ClipRect(
                                 child: SlideTransition(
-                                  position: Tween(begin: begin, end: Offset.zero).animate(anim),
-                                  child: FadeTransition(opacity: anim, child: child),
+                                  position: Tween(
+                                    begin: begin,
+                                    end: Offset.zero,
+                                  ).animate(anim),
+                                  child: FadeTransition(
+                                    opacity: anim,
+                                    child: child,
+                                  ),
                                 ),
                               );
                             },
                             child: Center(
                               key: ValueKey(_dayOffset),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                                 decoration: const ShapeDecoration(
-                                  color: Colors.white, shape: StadiumBorder(),
+                                  color: Colors.white,
+                                  shape: StadiumBorder(),
                                 ),
                                 child: Text(
                                   _labelFor(context, _dayOffset),
                                   style: tt.titleMedium?.copyWith(
-                                    color: cs.primary, fontWeight: FontWeight.w700),
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
                         SizedBox(
-                          width: 48, height: 40,
+                          width: 48,
+                          height: 40,
                           child: _ArrowBtn(
                             icon: Icons.chevron_right_rounded,
                             onTap: () => _go(1),
@@ -140,9 +218,20 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
                   // --- Resumo de calorias (compacto, sem ícones) ---
                   _CalorieSummaryConnectedCompact(
-                    goal: _dailyGoal,
+                    goal: _goal,
                     consumed: _consumed,
                   ),
+
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onPrimary.withValues(alpha: .9),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -158,14 +247,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 final begin = Offset((_slideDir) * 0.25, 0);
                 return ClipRect(
                   child: SlideTransition(
-                    position: Tween(begin: begin, end: Offset.zero).animate(anim),
+                    position: Tween(
+                      begin: begin,
+                      end: Offset.zero,
+                    ).animate(anim),
                     child: FadeTransition(opacity: anim, child: child),
                   ),
                 );
               },
               child: _DayContent(
                 key: ValueKey(_dayOffset),
-                goal: _dailyGoal,
+                goal: _goal,
                 consumed: _consumed,
                 mealCalories: _mealCalories,
                 onTapAddFood: (mealTitle) {
@@ -224,7 +316,9 @@ class _DayContent extends StatelessWidget {
     return ScrollConfiguration(
       behavior: const _BounceScrollBehavior(),
       child: ListView(
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: EdgeInsets.fromLTRB(16, 12, 16, bottom + 16),
         children: [
           _MealSection(
@@ -270,7 +364,11 @@ class _BounceScrollBehavior extends ScrollBehavior {
   ScrollPhysics getScrollPhysics(BuildContext context) =>
       const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
   @override
-  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
     return child; // sem glow
   }
 }
@@ -356,7 +454,11 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: onP.withValues(alpha: .14),
                   boxShadow: const [
-                    BoxShadow(blurRadius: 10, offset: Offset(0, 4), color: Color(0x22000000)),
+                    BoxShadow(
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                      color: Color(0x22000000),
+                    ),
                   ],
                 ),
               ),
@@ -377,7 +479,12 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
             // Divisórias desenhadas (não ocupam largura)
             Positioned.fill(
               child: CustomPaint(
-                painter: _VerticalDividersPainter(color: dividerColor, count: 2, topPad: 8, bottomPad: 8),
+                painter: _VerticalDividersPainter(
+                  color: dividerColor,
+                  count: 2,
+                  topPad: 8,
+                  bottomPad: 8,
+                ),
               ),
             ),
           ],
@@ -410,13 +517,20 @@ class _VerticalDividersPainter extends CustomPainter {
     for (var i = 1; i <= count; i++) {
       final x = size.width * i / (count + 1);
       final alignedX = x.floorToDouble() + 0.5; // alinhado ao pixel
-      canvas.drawLine(Offset(alignedX, topPad), Offset(alignedX, size.height - bottomPad), paint);
+      canvas.drawLine(
+        Offset(alignedX, topPad),
+        Offset(alignedX, size.height - bottomPad),
+        paint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _VerticalDividersPainter old) =>
-      old.color != color || old.count != count || old.topPad != topPad || old.bottomPad != bottomPad;
+      old.color != color ||
+      old.count != count ||
+      old.topPad != topPad ||
+      old.bottomPad != bottomPad;
 }
 
 /// --------- MEAL CARD ---------
@@ -451,7 +565,11 @@ class _MealSectionState extends State<_MealSection> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(blurRadius: 14, offset: Offset(0, 6), color: Color(0x14000000)),
+          BoxShadow(
+            blurRadius: 14,
+            offset: Offset(0, 6),
+            color: Color(0x14000000),
+          ),
         ],
       ),
       child: ClipRRect(
@@ -464,7 +582,10 @@ class _MealSectionState extends State<_MealSection> {
               child: InkWell(
                 onTap: _toggle,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -477,7 +598,10 @@ class _MealSectionState extends State<_MealSection> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: ShapeDecoration(
                           color: cs.onPrimary.withValues(alpha: 0.15),
                           shape: const StadiumBorder(),
@@ -494,8 +618,11 @@ class _MealSectionState extends State<_MealSection> {
                       AnimatedRotation(
                         turns: _expanded ? 0.5 : 0.0,
                         duration: const Duration(milliseconds: 160),
-                        child: Icon(Icons.keyboard_arrow_down_rounded,
-                            color: cs.onPrimary, size: 26),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: cs.onPrimary,
+                          size: 26,
+                        ),
                       ),
                     ],
                   ),
@@ -506,8 +633,9 @@ class _MealSectionState extends State<_MealSection> {
             // BODY branco (se expandido)
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 180),
-              crossFadeState:
-                  _expanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              crossFadeState: _expanded
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
               firstChild: Container(
                 width: double.infinity,
                 color: Colors.white,
@@ -578,8 +706,9 @@ class _ItemsList extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     if (items.isEmpty) {
-      final clr =
-          onPrimaryContext ? cs.onPrimary.withValues(alpha: .9) : cs.onSurface.withValues(alpha: .7);
+      final clr = onPrimaryContext
+          ? cs.onPrimary.withValues(alpha: .9)
+          : cs.onSurface.withValues(alpha: .7);
       final text = Text(
         "Sem itens adicionados.",
         style: tt.bodyMedium?.copyWith(color: clr, fontWeight: FontWeight.w600),
@@ -616,7 +745,8 @@ class _WaterCardState extends State<_WaterCard> {
   bool _expanded = true;
 
   void _toggle() => setState(() => _expanded = !_expanded);
-  void _applyDelta(int delta) => setState(() => ml = (ml + delta).clamp(0, 40000));
+  void _applyDelta(int delta) =>
+      setState(() => ml = (ml + delta).clamp(0, 40000));
 
   Future<void> _openCustomAmountSheet() async {
     final res = await showModalBottomSheet<_CustomAmountResult>(
@@ -646,7 +776,11 @@ class _WaterCardState extends State<_WaterCard> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(blurRadius: 14, offset: Offset(0, 6), color: Color(0x14000000)),
+          BoxShadow(
+            blurRadius: 14,
+            offset: Offset(0, 6),
+            color: Color(0x14000000),
+          ),
         ],
       ),
       child: ClipRRect(
@@ -659,7 +793,10 @@ class _WaterCardState extends State<_WaterCard> {
               child: InkWell(
                 onTap: _toggle,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -672,7 +809,10 @@ class _WaterCardState extends State<_WaterCard> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: ShapeDecoration(
                           color: cs.onPrimary.withValues(alpha: 0.15),
                           shape: const StadiumBorder(),
@@ -689,8 +829,11 @@ class _WaterCardState extends State<_WaterCard> {
                       AnimatedRotation(
                         turns: _expanded ? 0.5 : 0.0,
                         duration: const Duration(milliseconds: 160),
-                        child: Icon(Icons.keyboard_arrow_down_rounded,
-                            color: cs.onPrimary, size: 26),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: cs.onPrimary,
+                          size: 26,
+                        ),
                       ),
                     ],
                   ),
@@ -701,8 +844,9 @@ class _WaterCardState extends State<_WaterCard> {
             // BODY branco (apenas progress)
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 180),
-              crossFadeState:
-                  _expanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              crossFadeState: _expanded
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
               firstChild: Container(
                 width: double.infinity,
                 color: Colors.white,
@@ -715,7 +859,9 @@ class _WaterCardState extends State<_WaterCard> {
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 12,
-                        backgroundColor: cs.outlineVariant.withValues(alpha: .4),
+                        backgroundColor: cs.outlineVariant.withValues(
+                          alpha: .4,
+                        ),
                         valueColor: AlwaysStoppedAnimation(cs.primary),
                       ),
                     ),
@@ -784,12 +930,21 @@ class _CustomAmountSheetState extends State<_CustomAmountSheet> {
     final inset = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, bottom: inset + 16, top: 12),
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: inset + 16,
+        top: 12,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text("Adicionar água",
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            "Adicionar água",
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 16),
 
           Row(
@@ -818,7 +973,7 @@ class _CustomAmountSheetState extends State<_CustomAmountSheet> {
                     items: const [
                       DropdownMenuItem(value: "ml", child: Text("ml")),
                       DropdownMenuItem(value: "dl", child: Text("dl")),
-                      DropdownMenuItem(value: "L",  child: Text("L")),
+                      DropdownMenuItem(value: "L", child: Text("L")),
                     ],
                     onChanged: (v) => setState(() => _unit = v ?? "ml"),
                   ),
@@ -831,7 +986,7 @@ class _CustomAmountSheetState extends State<_CustomAmountSheet> {
           SegmentedButton<bool>(
             segments: const [
               ButtonSegment(value: false, label: Text("Somar")),
-              ButtonSegment(value: true,  label: Text("Subtrair")),
+              ButtonSegment(value: true, label: Text("Subtrair")),
             ],
             selected: {_subtract},
             onSelectionChanged: (s) => setState(() => _subtract = s.first),
@@ -879,15 +1034,22 @@ class _BottomActions extends StatelessWidget {
 
     // Gradiente Fresh Green (#4CAF6D) → Leafy Green (#66BB6A)
     const freshGreen = Color(0xFF4CAF6D);
-    const leafyGreen  = Color(0xFF66BB6A);
+    const leafyGreen = Color(0xFF66BB6A);
 
     return Column(
       children: [
         Row(
           children: const [
-            Expanded(child: _TonalPill(icon: Icons.pie_chart_outline_rounded, label: "Nutrição")),
+            Expanded(
+              child: _TonalPill(
+                icon: Icons.pie_chart_outline_rounded,
+                label: "Nutrição",
+              ),
+            ),
             SizedBox(width: 12),
-            Expanded(child: _TonalPill(icon: Icons.note_alt_outlined, label: "Notas")),
+            Expanded(
+              child: _TonalPill(icon: Icons.note_alt_outlined, label: "Notas"),
+            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -895,7 +1057,11 @@ class _BottomActions extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
             boxShadow: const [
-              BoxShadow(blurRadius: 18, offset: Offset(0, 10), color: Color(0x26000000)),
+              BoxShadow(
+                blurRadius: 18,
+                offset: Offset(0, 10),
+                color: Color(0x26000000),
+              ),
             ],
             gradient: const LinearGradient(
               colors: [freshGreen, leafyGreen],
@@ -948,7 +1114,7 @@ class _TonalPill extends StatelessWidget {
             blurRadius: 10,
             offset: Offset(0, 4),
             color: Color(0x12000000),
-          )
+          ),
         ],
       ),
       child: InkWell(
