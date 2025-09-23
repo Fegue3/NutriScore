@@ -13,7 +13,7 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-enum _Step { gender, birthdate, weight, targetWeight, height, activity, done }
+enum _Step { gender, birthdate, weight, targetWeight, targetDate, height, activity, done }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _page = PageController();
@@ -26,6 +26,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _weight = TextEditingController();
   final _targetWeight = TextEditingController();
   final _height = TextEditingController();
+
+  // Novo: data alvo (opcional)
+  DateTime? _targetDate; // quando quer atingir o peso alvo (opcional)
+  final _targetDateCtrl = TextEditingController();
 
   String?
       _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
@@ -47,6 +51,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _weight.dispose();
     _targetWeight.dispose();
     _height.dispose();
+    _targetDateCtrl.dispose(); // novo
     super.dispose();
   }
 
@@ -164,6 +169,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
         return true;
 
+      case _Step.targetDate:
+        // Opcional: se vazio, segue. Se preenchido, valida intervalo.
+        if (_targetDate == null) return true;
+        final now = DateTime.now();
+        final earliest = DateTime(now.year, now.month, now.day).add(const Duration(days: 1)); // amanhã
+        final latest = DateTime(now.year + 2, now.month, now.day); // até 2 anos
+        if (_targetDate!.isBefore(earliest) || _targetDate!.isAfter(latest)) {
+          snack.showSnackBar(
+            const SnackBar(content: Text('Escolhe uma data futura (até 2 anos).')),
+          );
+          return false;
+        }
+        return true;
+
       case _Step.height:
         final h = int.tryParse(_height.text);
         if (h == null || h < 90 || h > 250) {
@@ -205,6 +224,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         dateOfBirth: _dob,
         currentWeightKg: w,
         targetWeightKg: tw,
+        targetDate: _targetDate, // <--- NOVO (opcional)
         heightCm: h,
         activityLevel: _activity,
       );
@@ -316,6 +336,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                     _buildBirthdateStep(context),
                                     _buildWeightStep(context),
                                     _buildTargetWeightStep(context),
+                                    _buildTargetDateStep(context), // novo
                                     _buildHeightStep(context),
                                     _buildActivityStep(context),
                                     _buildDoneStep(context),
@@ -421,6 +442,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _dobCtrl.text = _formatDate(_dob!);
       });
     }
+  }
+
+  Future<void> _pickTargetDate() async {
+    final now = DateTime.now();
+    final first = DateTime(now.year, now.month, now.day).add(const Duration(days: 1)); // amanhã
+    final last = DateTime(now.year + 2, now.month, now.day); // até 2 anos
+
+    final initial = _targetDate != null
+        ? _targetDate!
+        : DateTime(now.year, now.month, now.day).add(const Duration(days: 90)); // sugestão: ~3 meses
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(first) || initial.isAfter(last)
+          ? first
+          : initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: 'Quando queres atingir o teu peso alvo? (opcional)',
+      cancelText: 'Limpar',
+      confirmText: 'OK',
+    );
+
+    // O showDatePicker não distingue "Cancelar" vs "Limpar", por isso:
+    if (picked == null) {
+      // Se quiseres “limpar”, deixa o user apagar manualmente ou adiciona um botão próprio.
+      return;
+    }
+
+    setState(() {
+      _targetDate = DateTime(picked.year, picked.month, picked.day);
+      _targetDateCtrl.text = _formatDate(_targetDate!);
+    });
   }
 
   // -------- UI dos passos --------
@@ -622,6 +676,58 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 8),
         Text(
           'Define um objetivo realista. Ex.: 68.0',
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .70),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTargetDateStep(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quando queres atingir esse peso? (opcional)',
+          style: tt.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _targetDateCtrl,
+          readOnly: true,
+          onTap: _pickTargetDate,
+          decoration: InputDecoration(
+            labelText: 'Data alvo',
+            hintText: 'DD/MM/AAAA',
+            suffixIcon: const Icon(Icons.event_rounded),
+            filled: true,
+            fillColor: cs.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.outline.withValues(alpha: .50)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.outline.withValues(alpha: .50)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: cs.primary, width: 2),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Se não escolheres, usamos só o peso alvo (podes definir a data mais tarde).',
           style: tt.bodyMedium?.copyWith(
             color: cs.onSurface.withValues(alpha: .70),
           ),
