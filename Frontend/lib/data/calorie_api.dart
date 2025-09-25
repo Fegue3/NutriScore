@@ -101,13 +101,13 @@ class CalorieApi {
     try {
       final headers = await _authHeaders();
 
-      String _fmt(DateTime d) =>
+      String fmt(DateTime d) =>
           '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
       final uri = Uri.parse('$baseUrl$PATH_PREFIX/calories/range').replace(
         queryParameters: {
-          'start': _fmt(start),
-          'end': _fmt(end),
+          'start': fmt(start),
+          'end': fmt(end),
           if (timezone != null && timezone.isNotEmpty) 'tz': timezone,
         },
       );
