@@ -9,7 +9,7 @@ class CalorieApi {
   static final CalorieApi I = CalorieApi._();
 
   String get baseUrl => AuthApi.baseUrl;
-  static const String PATH_PREFIX = '/api';
+  static const String pathPrefix = '/api';
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -52,7 +52,7 @@ class CalorieApi {
         dateParam = '$y-$m-$d';
       }
 
-      final uri = Uri.parse('$baseUrl$PATH_PREFIX/calories/daily').replace(
+      final uri = Uri.parse('$baseUrl$pathPrefix/calories/daily').replace(
         queryParameters: {
           if (dateParam != null) 'date': dateParam,
           if (timezone != null && timezone.isNotEmpty) 'tz': timezone,
@@ -82,7 +82,7 @@ class CalorieApi {
       final code = e.response?.statusCode;
       final url = e.requestOptions.uri.toString();
       final type = e.type;
-      throw 'Falha em GET $PATH_PREFIX/calories/daily: $msg (type=$type, code=$code, url=$url)';
+      throw 'Falha em GET $pathPrefix/calories/daily: $msg (type=$type, code=$code, url=$url)';
     }
   }
 
@@ -104,7 +104,7 @@ class CalorieApi {
       String fmt(DateTime d) =>
           '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-      final uri = Uri.parse('$baseUrl$PATH_PREFIX/calories/range').replace(
+      final uri = Uri.parse('$baseUrl$pathPrefix/calories/range').replace(
         queryParameters: {
           'start': fmt(start),
           'end': fmt(end),
@@ -135,7 +135,7 @@ class CalorieApi {
       final code = e.response?.statusCode;
       final url = e.requestOptions.uri.toString();
       final type = e.type;
-      throw 'Falha em GET $PATH_PREFIX/calories/range: $msg (type=$type, code=$code, url=$url)';
+      throw 'Falha em GET $pathPrefix/calories/range: $msg (type=$type, code=$code, url=$url)';
     }
   }
 }
