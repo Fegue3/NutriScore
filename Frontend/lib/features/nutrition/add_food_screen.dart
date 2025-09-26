@@ -13,23 +13,70 @@ class AddFoodScreen extends StatefulWidget {
 
 class _AddFoodScreenState extends State<AddFoodScreen> {
   final _searchCtrl = TextEditingController();
-  static const _meals = <String>["Pequeno-almoço", "Almoço", "Lanche", "Jantar"];
+  static const _meals = <String>[
+    "Pequeno-almoço",
+    "Almoço",
+    "Lanche",
+    "Jantar",
+  ];
   late String _selectedMeal;
 
   // NOVO: apenas um flip de estado para mudar o título
   bool _showPesquisa = false;
 
   final List<_HistoryItem> _history = const [
-    _HistoryItem(name: "Iogurte natural", kcal: 63, brand: "Milbona", homemade: false, organic: true, quantityLabel: "125 g", sugarsG: 4.7, fatG: 3.5, saltG: 0.08),
-    _HistoryItem(name: "Pão integral", kcal: 240, brand: "Padaria do Bairro", homemade: true, organic: false, quantityLabel: "1 fatia (40 g)", sugarsG: 1.6, fatG: 1.3, saltG: 0.45),
-    _HistoryItem(name: "Bolacha de aveia", kcal: 90, brand: "OatBite", homemade: false, organic: false, quantityLabel: "1 un (18 g)", sugarsG: 3.2, fatG: 3.8, saltG: 0.06),
-    _HistoryItem(name: "Sumo de laranja", kcal: 45, brand: "Caseiro", homemade: true, organic: false, quantityLabel: "200 ml", sugarsG: 8.9, fatG: 0.1, saltG: 0.00),
+    _HistoryItem(
+      name: "Iogurte natural",
+      kcal: 63,
+      brand: "Milbona",
+      homemade: false,
+      organic: true,
+      quantityLabel: "125 g",
+      sugarsG: 4.7,
+      fatG: 3.5,
+      saltG: 0.08,
+    ),
+    _HistoryItem(
+      name: "Pão integral",
+      kcal: 240,
+      brand: "Padaria do Bairro",
+      homemade: true,
+      organic: false,
+      quantityLabel: "1 fatia (40 g)",
+      sugarsG: 1.6,
+      fatG: 1.3,
+      saltG: 0.45,
+    ),
+    _HistoryItem(
+      name: "Bolacha de aveia",
+      kcal: 90,
+      brand: "OatBite",
+      homemade: false,
+      organic: false,
+      quantityLabel: "1 un (18 g)",
+      sugarsG: 3.2,
+      fatG: 3.8,
+      saltG: 0.06,
+    ),
+    _HistoryItem(
+      name: "Sumo de laranja",
+      kcal: 45,
+      brand: "Caseiro",
+      homemade: true,
+      organic: false,
+      quantityLabel: "200 ml",
+      sugarsG: 8.9,
+      fatG: 0.1,
+      saltG: 0.00,
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _selectedMeal = _meals.contains(widget.initialMeal) ? widget.initialMeal! : "Lanche";
+    _selectedMeal = _meals.contains(widget.initialMeal)
+        ? widget.initialMeal!
+        : "Lanche";
     _searchCtrl.addListener(() => setState(() {}));
   }
 
@@ -42,7 +89,8 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   void _onSearchSubmitted(String q) {
     final query = q.trim();
     setState(() {
-      _showPesquisa = query.isNotEmpty; // se tem texto -> “Pesquisa”, senão volta a “Histórico”
+      _showPesquisa = query
+          .isNotEmpty; // se tem texto -> “Pesquisa”, senão volta a “Histórico”
     });
   }
 
@@ -84,7 +132,8 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: _MealComboChipCentered(
                               value: _selectedMeal,
-                              onChanged: (v) => setState(() => _selectedMeal = v),
+                              onChanged: (v) =>
+                                  setState(() => _selectedMeal = v),
                               chipColor: cs.primary,
                               textColor: cs.onPrimary, // branco
                             ),
@@ -118,9 +167,11 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
             // ===================== SCAN =====================
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: _ScanCardSurfaceGreen(onTap: () {
-                // TODO: abrir scanner
-              }),
+              child: _ScanCardSurfaceGreen(
+                onTap: () {
+                  // TODO: abrir scanner
+                },
+              ),
             ),
 
             // ===================== HISTÓRICO / PESQUISA =====================
@@ -143,7 +194,31 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                     );
                   }
                   final it = _history[i - 1];
-                  return _HistoryTile(item: it, onTap: () {});
+                  return _HistoryTile(
+                    item: it,
+                    onTap: () {
+                      context.pushNamed(
+                        'productDetail',
+                        extra: {
+                          "name": it.name,
+                          "brand": it.brand,
+                          "origin": "Portugal", // TODO: da API
+                          "baseQuantityLabel": it.quantityLabel,
+                          "kcalPerBase": it.kcal,
+                          "proteinGPerBase": 3.5, // TODO: API
+                          "carbsGPerBase": 7.0, // TODO: API
+                          "fatGPerBase": it.fatG,
+                          "saltGPerBase": it.saltG,
+                          "sugarsGPerBase": it.sugarsG,
+                          "nutriScore": "B", // TODO: API
+                          "ingredients":
+                              "Leite pasteurizado, fermentos lácteos.",
+                          "allergens": "Leite.",
+                          "categories": "Laticínios, Iogurtes naturais",
+                        },
+                      );
+                    },
+                  );
                 },
               ),
             ),
@@ -170,7 +245,12 @@ class _MealComboChipCentered extends StatelessWidget {
     required this.textColor,
   });
 
-  static const _meals = <String>["Pequeno-almoço", "Almoço", "Lanche", "Jantar"];
+  static const _meals = <String>[
+    "Pequeno-almoço",
+    "Almoço",
+    "Lanche",
+    "Jantar",
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +353,13 @@ class _SearchBarHero extends StatelessWidget {
             color: Colors.white.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(28),
             border: Border.all(color: Colors.white.withValues(alpha: .22)),
-            boxShadow: const [BoxShadow(blurRadius: 10, offset: Offset(0, 4), color: Color(0x22000000))],
+            boxShadow: const [
+              BoxShadow(
+                blurRadius: 10,
+                offset: Offset(0, 4),
+                color: Color(0x22000000),
+              ),
+            ],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
@@ -284,12 +370,17 @@ class _SearchBarHero extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   textInputAction: TextInputAction.search,
-                  style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w600,
+                  ),
                   cursorColor: textColor,
                   onSubmitted: onSubmitted,
                   decoration: InputDecoration(
                     hintText: hintText,
-                    hintStyle: TextStyle(color: textColor.withValues(alpha: .9)),
+                    hintStyle: TextStyle(
+                      color: textColor.withValues(alpha: .9),
+                    ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
@@ -334,8 +425,17 @@ class _ScanCardSurfaceGreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: cs.primary,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(blurRadius: 10, offset: Offset(0, 6), color: Color(0x1A000000))],
-          border: Border.all(color: Colors.white.withValues(alpha: .30), width: 1.2),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 10,
+              offset: Offset(0, 6),
+              color: Color(0x1A000000),
+            ),
+          ],
+          border: Border.all(
+            color: Colors.white.withValues(alpha: .30),
+            width: 1.2,
+          ),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
@@ -344,26 +444,37 @@ class _ScanCardSurfaceGreen extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(Icons.qr_code_scanner_rounded, color: cs.onPrimary, size: 36),
+                Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: cs.onPrimary,
+                  size: 36,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Scan código de barras",
-                          style: tt.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: cs.onPrimary,
-                          )),
+                      Text(
+                        "Scan código de barras",
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: cs.onPrimary,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         "Usa a câmara para adicionar rapidamente um produto.",
-                        style: tt.bodyMedium?.copyWith(color: cs.onPrimary.withValues(alpha: .96)),
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onPrimary.withValues(alpha: .96),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, color: cs.onPrimary.withValues(alpha: .96)),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: cs.onPrimary.withValues(alpha: .96),
+                ),
               ],
             ),
           ),
@@ -381,11 +492,17 @@ class _TopCurveClipper extends CustomClipper<Path> {
     final p = Path();
     p.lineTo(0, 0);
     p.lineTo(0, size.height);
-    p.quadraticBezierTo(size.width * 0.5, -size.height, size.width, size.height);
+    p.quadraticBezierTo(
+      size.width * 0.5,
+      -size.height,
+      size.width,
+      size.height,
+    );
     p.lineTo(size.width, 0);
     p.close();
     return p;
   }
+
   @override
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
@@ -426,14 +543,20 @@ class _HistoryTile extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     Widget tag(String text) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: cs.primary.withValues(alpha: .10),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: cs.primary.withValues(alpha: .25)),
-          ),
-          child: Text(text, style: tt.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
-        );
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.primary.withValues(alpha: .25)),
+      ),
+      child: Text(
+        text,
+        style: tt.labelSmall?.copyWith(
+          color: cs.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
 
     return Material(
       color: cs.surface,
@@ -452,36 +575,69 @@ class _HistoryTile extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text(item.name, style: tt.titleMedium?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800))),
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: tt.titleMedium?.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
                         Material(
                           color: cs.primary,
                           shape: const CircleBorder(),
                           child: InkWell(
                             customBorder: const CircleBorder(),
                             onTap: onTap,
-                            child: const Padding(padding: EdgeInsets.all(6), child: Icon(Icons.add, size: 20, color: Colors.white)),
+                            child: const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(
+                                Icons.add,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text("${item.brand} • ${item.quantityLabel}", style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    Text(
+                      "${item.brand} • ${item.quantityLabel}",
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
                     const SizedBox(height: 6),
-                    Row(children: [
-                      if (item.homemade) tag("Caseiro"),
-                      if (item.homemade && item.organic) const SizedBox(width: 6),
-                      if (item.organic) tag("Bio"),
-                    ]),
+                    Row(
+                      children: [
+                        if (item.homemade) tag("Caseiro"),
+                        if (item.homemade && item.organic)
+                          const SizedBox(width: 6),
+                        if (item.organic) tag("Bio"),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        _MiniMetric(label: "Calorias", value: "${item.kcal} kcal"),
+                        _MiniMetric(
+                          label: "Calorias",
+                          value: "${item.kcal} kcal",
+                        ),
                         const SizedBox(width: 12),
-                        _MiniMetric(label: "Açúcares", value: "${item.sugarsG.toStringAsFixed(1)} g"),
+                        _MiniMetric(
+                          label: "Açúcares",
+                          value: "${item.sugarsG.toStringAsFixed(1)} g",
+                        ),
                         const SizedBox(width: 12),
-                        _MiniMetric(label: "Gord.", value: "${item.fatG.toStringAsFixed(1)} g"),
+                        _MiniMetric(
+                          label: "Gord.",
+                          value: "${item.fatG.toStringAsFixed(1)} g",
+                        ),
                         const SizedBox(width: 12),
-                        _MiniMetric(label: "Sal", value: "${item.saltG.toStringAsFixed(2)} g"),
+                        _MiniMetric(
+                          label: "Sal",
+                          value: "${item.saltG.toStringAsFixed(2)} g",
+                        ),
                       ],
                     ),
                   ],
@@ -514,9 +670,18 @@ class _MiniMetric extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            Text(
+              label,
+              style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
             const SizedBox(height: 2),
-            Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface)),
+            Text(
+              value,
+              style: tt.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface,
+              ),
+            ),
           ],
         ),
       ),
