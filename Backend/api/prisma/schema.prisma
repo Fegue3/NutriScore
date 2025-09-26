@@ -164,9 +164,9 @@ model ProductHistory {
   scannedAt  DateTime    @default(now())
   nutriScore NutriGrade?
   calories   Int?
-  sugars     Decimal?    @db.Decimal(6, 2)
-  fat        Decimal?    @db.Decimal(6, 2)
-  salt       Decimal?    @db.Decimal(6, 2)
+  proteins     Decimal?    @db.Decimal(6, 2)
+  carbs        Decimal?    @db.Decimal(6, 2)
+  fat       Decimal?    @db.Decimal(6, 2)
 
   @@index([userId, scannedAt])
   @@index([barcode])
