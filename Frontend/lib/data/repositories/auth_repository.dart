@@ -11,16 +11,18 @@ class AuthRepository {
   Listenable get routerRefresh => _routerTick;
   void _bumpRouter() => _routerTick.value++;
 
-  // Stream para quem quiser ouvir mudanças de auth (já usavas no router)
+  // Stream para quem quiser ouvir mudanças de auth
   final _changes = StreamController<void>.broadcast();
 
   bool _isLoggedIn = false;
   bool _isLoggingOut = false;
   bool _onboardingCompleted = false;
+  bool _bootstrapped = false; // 👈 evita redirects antes de bootstrap
 
   bool get isLoggedIn => _isLoggedIn;
   bool get isLoggingOut => _isLoggingOut;
   bool get onboardingCompleted => _onboardingCompleted;
+  bool get bootstrapped => _bootstrapped;
 
   Stream<void> get authStateChanges => _changes.stream;
 
@@ -38,7 +40,7 @@ class AuthRepository {
       }
     }
 
-    // Notifica subscribers e reavalia router
+    _bootstrapped = true; // 👈 marca como concluído
     _changes.add(null);
     _bumpRouter();
   }
@@ -64,7 +66,7 @@ class AuthRepository {
   void setOnboardingCompleted(bool v) {
     _onboardingCompleted = v;
     _changes.add(null);
-    _bumpRouter(); // <- crítico para o GoRouter reavaliar imediatamente
+    _bumpRouter();
   }
 
   /// Endpoint para apagar conta (idempotente para UX).
@@ -89,6 +91,7 @@ class AuthRepository {
 
     _isLoggingOut = false;
     _onboardingCompleted = false; // reset para próxima sessão
+    _bootstrapped = false;        // precisa de novo bootstrap
     _changes.add(null);
     _bumpRouter();
   }
