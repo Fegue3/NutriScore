@@ -85,6 +85,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 
   // Disponível quando integrares o fluxo “Adicionar alimento”
+  // ignore: unused_element
   void _setMealCalories(String meal, int kcal) {
     if (!_mealCalories.containsKey(meal)) return;
     setState(() => _mealCalories[meal] = kcal.clamp(0, 100000));
