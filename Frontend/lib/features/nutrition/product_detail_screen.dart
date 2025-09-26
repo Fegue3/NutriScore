@@ -54,12 +54,6 @@ class ProductDetailScreen extends StatefulWidget {
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  static const _meals = <String>[
-    "Pequeno-almoço",
-    "Almoço",
-    "Lanche",
-    "Jantar",
-  ];
   String _selectedMeal = "Almoço";
 
   final TextEditingController _portionCtrl = TextEditingController(text: "1");
