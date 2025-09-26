@@ -28,33 +28,47 @@ final GoRouter appRouter = GoRouter(
     di.authRepository.routerRefresh,
   ]),
   redirect: (context, state) {
-    // ⚠️ enquanto não tiver bootstrapped, não fazemos redirect nenhum
-    if (!di.authRepository.bootstrapped) return null;
+    final repo = di.authRepository;
 
-    final logged = di.authRepository.isLoggedIn;
-    final loggingOut = di.authRepository.isLoggingOut;
-    final pending = logged && !di.authRepository.onboardingCompleted;
+    // 0) enquanto não há bootstrap, não decides nada
+    if (!repo.bootstrapped) return null;
 
     final loc = state.matchedLocation;
-    final isAuthRoute = (loc == '/' || loc == '/login' || loc == '/signup');
-    final isOnboarding = (loc == '/onboarding');
+    final atAuthHub = (loc == '/');
+    final atLogin = (loc == '/login');
+    final atSignup = (loc == '/signup');
+    final atAuth = atAuthHub || atLogin || atSignup;
+    final atOnboarding = (loc == '/onboarding');
 
-    if (!logged) {
-      if (isOnboarding) return '/signup';
-      if (!isAuthRoute) return '/';
-      return null;
+    // 1) a sair?
+    if (repo.isLoggingOut) return atAuth ? null : '/';
+
+    // 2) não autenticado -> AuthHub
+    if (!repo.isLoggedIn) {
+      // Se por algum motivo ficou em /onboarding, recua para /
+      return atAuth ? null : '/';
     }
-    if (pending && !isOnboarding) return '/onboarding';
-    if (!pending && isAuthRoute && !loggingOut) return '/dashboard';
+
+    // 3) autenticado mas sem onboarding -> Onboarding
+    final needsOnboarding = !repo.onboardingCompleted;
+    if (needsOnboarding) {
+      return atOnboarding ? null : '/onboarding';
+    }
+
+    // 4) autenticado e onboarding feito:
+    // se estiver em rotas de auth, manda para dashboard
+    if (atAuth) return '/dashboard';
+
+    // 5) caso contrário, segue
     return null;
   },
   routes: [
-    // Públicas
+    // Públicas (Auth)
     GoRoute(path: '/', builder: (_, __) => const AuthHubScreen()),
     GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
     GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
 
-    // Onboarding
+    // Onboarding (só acessível autenticado + pending)
     GoRoute(
       path: '/onboarding',
       builder: (_, __) => OnboardingScreen(authRepository: di.authRepository),
@@ -67,24 +81,20 @@ final GoRouter appRouter = GoRouter(
           AddFoodScreen(initialMeal: state.uri.queryParameters['meal']),
     ),
 
-    // Detalhe do produto — compatível com ProductDetailScreen v8
+    // Detalhe do produto
     GoRoute(
       name: 'productDetail',
       path: '/product-detail',
       builder: (_, state) {
         final m = (state.extra as Map?) ?? {};
-        num? n(Object? x) =>
-            x is num ? x : (x is String ? num.tryParse(x) : null);
+        num? n(Object? x) => x is num ? x : (x is String ? num.tryParse(x) : null);
 
         return ProductDetailScreen(
           key: state.pageKey,
-          // METADADOS
           name: m["name"] ?? "Produto",
           brand: m["brand"] as String?,
           origin: m["origin"] as String?,
           baseQuantityLabel: m["baseQuantityLabel"] as String? ?? "100 g",
-
-          // NUTRIMENTOS por base
           kcalPerBase: (n(m["kcalPerBase"]) ?? 0).toInt(),
           proteinGPerBase: (n(m["proteinGPerBase"]) ?? 0).toDouble(),
           carbsGPerBase: (n(m["carbsGPerBase"]) ?? 0).toDouble(),
@@ -94,8 +104,6 @@ final GoRouter appRouter = GoRouter(
           satFatGPerBase: n(m["satFatGPerBase"])?.toDouble(),
           fiberGPerBase: n(m["fiberGPerBase"])?.toDouble(),
           sodiumGPerBase: n(m["sodiumGPerBase"])?.toDouble(),
-
-          // EXTRA
           nutriScore: m["nutriScore"] as String?,
         );
       },
@@ -111,13 +119,11 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/diary',
-          pageBuilder: (_, __) =>
-              const NoTransitionPage(child: NutritionScreen()),
+          pageBuilder: (_, __) => const NoTransitionPage(child: NutritionScreen()),
         ),
         GoRoute(
           path: '/settings',
-          pageBuilder: (_, __) =>
-              const NoTransitionPage(child: SettingsScreen()),
+          pageBuilder: (_, __) => const NoTransitionPage(child: SettingsScreen()),
         ),
       ],
     ),
