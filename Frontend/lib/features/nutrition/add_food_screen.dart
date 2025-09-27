@@ -122,6 +122,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
         "baseQuantityLabel": "100 g",
         "kcalPerBase": it.energyKcal100g ?? 0,
         "nutriScore": it.nutriScore,
+        "initialMeal": _selectedMeal,
       },
     );
     if (!mounted) return;
@@ -131,7 +132,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   Future<void> _openDetailFromHistory(ProductHistoryItem h) async {
     final barcode = h.barcode ?? h.product?.barcode;
     if (barcode != null && barcode.isNotEmpty) {
-      await context.pushNamed('productDetail', extra: {"barcode": barcode});
+      await context.pushNamed('productDetail', extra: {"barcode": barcode, "initialMeal": _selectedMeal});
     } else {
       final p = h.product;
       await context.pushNamed(
@@ -145,6 +146,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
           "proteinGPerBase": h.proteins,
           "carbsGPerBase": h.carbs,
           "fatGPerBase": h.fat,
+          "initialMeal": _selectedMeal,
         },
       );
     }

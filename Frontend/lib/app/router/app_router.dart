@@ -104,6 +104,7 @@ GoRouter buildAppRouter(AuthRepository repo) {
             fiberGPerBase: n(m["fiberGPerBase"])?.toDouble(),
             sodiumGPerBase: n(m["sodiumGPerBase"])?.toDouble(),
             nutriScore: m["nutriScore"] as String?,
+            initialMeal: m["initialMeal"] as String?,
           );
         },
       ),
