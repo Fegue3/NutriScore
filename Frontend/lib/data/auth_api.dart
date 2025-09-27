@@ -85,6 +85,25 @@ class AuthApi {
     }
   }
 
+  /// Refresh do access/refresh token.
+  Future<({String accessToken, String refreshToken})> refresh({required String refreshToken}) async {
+    try {
+      final res = await _dio.post('/auth/refresh', data: {'refreshToken': refreshToken});
+      final data = res.data as Map<String, dynamic>;
+      final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
+      final access = (tokens['accessToken'] as String?) ?? (tokens['access_token'] as String?) ?? '';
+      final newRefresh = (tokens['refreshToken'] as String?) ?? (tokens['refresh_token'] as String?) ?? '';
+      if (access.isEmpty || newRefresh.isEmpty) throw 'Tokens inválidos no refresh';
+      return (accessToken: access, refreshToken: newRefresh);
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = e.response?.data is Map
+          ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
+          : (e.message ?? 'Erro de rede');
+      throw 'Falha no refresh: $msg (code=$code)';
+    }
+  }
+
   /// DELETE /auth/me — apaga a conta atual (idempotente: 204/200/404 são aceites).
   Future<void> deleteAccount() async {
     final token = await AuthStorage.I.readAccessToken();
@@ -139,7 +158,6 @@ class AuthApi {
         if (targetDate != null) 'targetDate': targetDate.toIso8601String(),
       };
 
-      // 👇 path certo do backend Nest
       final res = await _dio.put('/api/me/goals', data: payload);
       if (res.statusCode != 200) {
         throw 'Falha ao guardar metas (HTTP ${res.statusCode})';
@@ -155,20 +173,24 @@ class AuthApi {
 
   // -------- Flags de onboarding --------
   Future<bool> getOnboardingCompleted() async {
-    final res = await _dio.get('/api/me/flags');
-    final v = res.data?['flags']?['onboardingCompleted'];
-    return v == true;
+    try {
+      final res = await _dio.get('/api/me/flags');
+      final v = res.data?['flags']?['onboardingCompleted'];
+      return v == true;
+    } on DioException catch (e) {
+      // Propaga o erro (ex.: 401) para o repo decidir fazer refresh ou não
+      rethrow;
+    }
   }
 
   Future<void> setOnboardingCompleted(bool value) async {
-  try {
-    final res = await _dio.patch('/api/me/flags', data: {'onboardingCompleted': value});
-    if (res.statusCode != 200) throw 'HTTP ${res.statusCode}';
-  } on DioException catch (e) {
-    final status = e.response?.statusCode;
-    final body = e.response?.data;
-    throw 'PATCH /api/me/flags falhou (status=$status, body=$body)';
+    try {
+      final res = await _dio.patch('/api/me/flags', data: {'onboardingCompleted': value});
+      if (res.statusCode != 200) throw 'HTTP ${res.statusCode}';
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final body = e.response?.data;
+      throw 'PATCH /api/me/flags falhou (status=$status, body=$body)';
+    }
   }
-}
-
 }
