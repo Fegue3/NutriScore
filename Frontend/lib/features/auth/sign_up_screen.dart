@@ -39,11 +39,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
         refreshToken: result.refreshToken,
       );
       if (!mounted) return;
-      if (di.authRepository.onboardingCompleted) {
-        context.go('/dashboard');
-      } else {
-        context.go('/onboarding');
-      }
+      final ob = di.authRepository.onboardingCompleted; // bool?
+      context.go(ob == false ? '/onboarding' : '/dashboard');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
