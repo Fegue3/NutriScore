@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+// lib/app/router/app_router.dart
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/auth_hub_screen.dart';
@@ -13,119 +15,120 @@ import '../../features/nutrition/product_detail_screen.dart';
 import '../../features/settings/settings_screen.dart';
 
 import '../app_shell.dart';
-import '../di.dart';
+import '../../data/repositories/auth_repository.dart';
 
 class _AuthRefresh extends ChangeNotifier {
-  _AuthRefresh() {
-    di.authRepository.authStateChanges.listen((_) => notifyListeners());
+  _AuthRefresh(this._repo) {
+    _sub = _repo.authStateChanges.listen((_) => notifyListeners());
+  }
+  final AuthRepository _repo;
+  late final StreamSubscription _sub;
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
   }
 }
 
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
-  refreshListenable: Listenable.merge([
-    _AuthRefresh(),
-    di.authRepository.routerRefresh,
-  ]),
-  redirect: (context, state) {
-    final repo = di.authRepository;
+/// Usa no main.dart:
+/// final router = buildAppRouter(di.authRepository);
+GoRouter buildAppRouter(AuthRepository repo) {
+  return GoRouter(
+    initialLocation: '/',
+    refreshListenable: Listenable.merge([
+      _AuthRefresh(repo),
+      repo.routerRefresh,
+    ]),
+    redirect: (context, state) {
+      if (!repo.bootstrapped) return null;
 
-    // 0) enquanto não há bootstrap, não decides nada
-    if (!repo.bootstrapped) return null;
+      final loc = state.matchedLocation;
+      final atAuthHub = (loc == '/');
+      final atLogin = (loc == '/login');
+      final atSignup = (loc == '/signup');
+      final atAuth = atAuthHub || atLogin || atSignup;
+      final atOnboarding = (loc == '/onboarding');
 
-    final loc = state.matchedLocation;
-    final atAuthHub = (loc == '/');
-    final atLogin = (loc == '/login');
-    final atSignup = (loc == '/signup');
-    final atAuth = atAuthHub || atLogin || atSignup;
-    final atOnboarding = (loc == '/onboarding');
+      if (repo.isLoggingOut) return atAuth ? null : '/';
+      if (!repo.isLoggedIn) return atAuth ? null : '/';
 
-    // 1) a sair?
-    if (repo.isLoggingOut) return atAuth ? null : '/';
+      final needsOnboarding = (repo.onboardingCompleted == false);
+      if (needsOnboarding) return atOnboarding ? null : '/onboarding';
 
-    // 2) não autenticado -> AuthHub
-    if (!repo.isLoggedIn) {
-      // Se por algum motivo ficou em /onboarding, recua para /
-      return atAuth ? null : '/';
-    }
+      if (atAuth) return '/dashboard';
+      return null;
+    },
+    routes: [
+      // Públicas (Auth)
+      GoRoute(path: '/', builder: (_, __) => const AuthHubScreen()),
+      GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
+      GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
 
-    // 3) autenticado mas sem onboarding -> Onboarding
-    final needsOnboarding = !repo.onboardingCompleted;
-    if (needsOnboarding) {
-      return atOnboarding ? null : '/onboarding';
-    }
+      // Onboarding
+      GoRoute(
+        path: '/onboarding',
+        builder: (_, __) => OnboardingScreen(authRepository: repo),
+      ),
 
-    // 4) autenticado e onboarding feito:
-    // se estiver em rotas de auth, manda para dashboard
-    if (atAuth) return '/dashboard';
+      // Fullscreen fora do shell
+      GoRoute(
+        path: '/add-food',
+        builder: (_, state) =>
+            AddFoodScreen(initialMeal: state.uri.queryParameters['meal']),
+      ),
 
-    // 5) caso contrário, segue
-    return null;
-  },
-  routes: [
-    // Públicas (Auth)
-    GoRoute(path: '/', builder: (_, __) => const AuthHubScreen()),
-    GoRoute(path: '/login', builder: (_, __) => const SignInScreen()),
-    GoRoute(path: '/signup', builder: (_, __) => const SignUpScreen()),
+      // Detalhe do produto
+      GoRoute(
+        name: 'productDetail',
+        path: '/product-detail',
+        builder: (_, state) {
+          final m = (state.extra as Map?) ?? {};
+          num? n(Object? x) =>
+              x is num ? x : (x is String ? num.tryParse(x) : null);
 
-    // Onboarding (só acessível autenticado + pending)
-    GoRoute(
-      path: '/onboarding',
-      builder: (_, __) => OnboardingScreen(authRepository: di.authRepository),
-    ),
+          return ProductDetailScreen(
+            key: state.pageKey,
+            barcode: m["barcode"] as String?,
+            name: m["name"] as String? ?? "Produto",
+            brand: m["brand"] as String?,
+            origin: m["origin"] as String?,
+            baseQuantityLabel: m["baseQuantityLabel"] as String? ?? "100 g",
+            kcalPerBase: (n(m["kcalPerBase"]) ?? 0).toInt(),
+            proteinGPerBase: (n(m["proteinGPerBase"]) ?? 0).toDouble(),
+            carbsGPerBase: (n(m["carbsGPerBase"]) ?? 0).toDouble(),
+            fatGPerBase: (n(m["fatGPerBase"]) ?? 0).toDouble(),
+            saltGPerBase: n(m["saltGPerBase"])?.toDouble(),
+            sugarsGPerBase: n(m["sugarsGPerBase"])?.toDouble(),
+            satFatGPerBase: n(m["satFatGPerBase"])?.toDouble(),
+            fiberGPerBase: n(m["fiberGPerBase"])?.toDouble(),
+            sodiumGPerBase: n(m["sodiumGPerBase"])?.toDouble(),
+            nutriScore: m["nutriScore"] as String?,
+          );
+        },
+      ),
 
-    // Fullscreen fora do shell
-    GoRoute(
-      path: '/add-food',
-      builder: (_, state) =>
-          AddFoodScreen(initialMeal: state.uri.queryParameters['meal']),
-    ),
-
-    // Detalhe do produto
-    GoRoute(
-      name: 'productDetail',
-      path: '/product-detail',
-      builder: (_, state) {
-        final m = (state.extra as Map?) ?? {};
-        num? n(Object? x) => x is num ? x : (x is String ? num.tryParse(x) : null);
-
-        return ProductDetailScreen(
-          key: state.pageKey,
-          name: m["name"] ?? "Produto",
-          brand: m["brand"] as String?,
-          origin: m["origin"] as String?,
-          baseQuantityLabel: m["baseQuantityLabel"] as String? ?? "100 g",
-          kcalPerBase: (n(m["kcalPerBase"]) ?? 0).toInt(),
-          proteinGPerBase: (n(m["proteinGPerBase"]) ?? 0).toDouble(),
-          carbsGPerBase: (n(m["carbsGPerBase"]) ?? 0).toDouble(),
-          fatGPerBase: (n(m["fatGPerBase"]) ?? 0).toDouble(),
-          saltGPerBase: n(m["saltGPerBase"])?.toDouble(),
-          sugarsGPerBase: n(m["sugarsGPerBase"])?.toDouble(),
-          satFatGPerBase: n(m["satFatGPerBase"])?.toDouble(),
-          fiberGPerBase: n(m["fiberGPerBase"])?.toDouble(),
-          sodiumGPerBase: n(m["sodiumGPerBase"])?.toDouble(),
-          nutriScore: m["nutriScore"] as String?,
-        );
-      },
-    ),
-
-    // Shell com bottom nav
-    ShellRoute(
-      builder: (_, __, child) => AppShell(child: child),
-      routes: [
-        GoRoute(
-          path: '/dashboard',
-          pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
-        ),
-        GoRoute(
-          path: '/diary',
-          pageBuilder: (_, __) => const NoTransitionPage(child: NutritionScreen()),
-        ),
-        GoRoute(
-          path: '/settings',
-          pageBuilder: (_, __) => const NoTransitionPage(child: SettingsScreen()),
-        ),
-      ],
-    ),
-  ],
-);
+      // Shell com bottom nav
+      ShellRoute(
+        builder: (_, __, child) => AppShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/dashboard',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: HomeScreen()),
+          ),
+          GoRoute(
+            path: '/diary',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: NutritionScreen()),
+          ),
+          GoRoute(
+            path: '/settings',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: SettingsScreen()),
+          ),
+        ],
+      ),
+    ],
+  );
+}
