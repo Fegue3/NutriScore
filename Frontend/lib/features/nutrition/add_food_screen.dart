@@ -1,8 +1,11 @@
+// lib/features/nutrition/add_food_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// NutriScore — AddFoodScreen (v7.2 – alterna Histórico/Pesquisa ao submeter)
+import '../../data/products_api.dart'; // ProductsApi, ProductSummary, ProductHistoryItem
+
+/// NutriScore — AddFoodScreen (v9.2 - histórico real via API, sem imagens nas listas)
 class AddFoodScreen extends StatefulWidget {
   final String? initialMeal; // "Pequeno-almoço", "Almoço", "Lanche", "Jantar"
   const AddFoodScreen({super.key, this.initialMeal});
@@ -21,55 +24,16 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   ];
   late String _selectedMeal;
 
-  // NOVO: apenas um flip de estado para mudar o título
+  // Alterna título Histórico/Pesquisa
   bool _showPesquisa = false;
 
-  final List<_HistoryItem> _history = const [
-    _HistoryItem(
-      name: "Iogurte natural",
-      kcal: 63,
-      brand: "Milbona",
-      homemade: false,
-      organic: true,
-      quantityLabel: "125 g",
-      sugarsG: 4.7,
-      fatG: 3.5,
-      saltG: 0.08,
-    ),
-    _HistoryItem(
-      name: "Pão integral",
-      kcal: 240,
-      brand: "Padaria do Bairro",
-      homemade: true,
-      organic: false,
-      quantityLabel: "1 fatia (40 g)",
-      sugarsG: 1.6,
-      fatG: 1.3,
-      saltG: 0.45,
-    ),
-    _HistoryItem(
-      name: "Bolacha de aveia",
-      kcal: 90,
-      brand: "OatBite",
-      homemade: false,
-      organic: false,
-      quantityLabel: "1 un (18 g)",
-      sugarsG: 3.2,
-      fatG: 3.8,
-      saltG: 0.06,
-    ),
-    _HistoryItem(
-      name: "Sumo de laranja",
-      kcal: 45,
-      brand: "Caseiro",
-      homemade: true,
-      organic: false,
-      quantityLabel: "200 ml",
-      sugarsG: 8.9,
-      fatG: 0.1,
-      saltG: 0.00,
-    ),
-  ];
+  // Estado API
+  bool _loading = false;
+  List<ProductSummary> _results = const [];
+
+  // Histórico REAL
+  bool _loadingHistory = false;
+  List<ProductHistoryItem> _history = const [];
 
   @override
   void initState() {
@@ -77,7 +41,25 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
     _selectedMeal = _meals.contains(widget.initialMeal)
         ? widget.initialMeal!
         : "Lanche";
-    _searchCtrl.addListener(() => setState(() {}));
+
+    _fetchHistory(); // carrega logo o histórico
+
+    // Sugestões rápidas enquanto escreve
+    _searchCtrl.addListener(() async {
+      final q = _searchCtrl.text.trim();
+      setState(() => _showPesquisa = q.isNotEmpty);
+      if (q.isEmpty) {
+        setState(() => _results = const []);
+        return;
+      }
+      try {
+        final items = await ProductsApi.I.suggest(q, limit: 8);
+        if (!mounted) return;
+        setState(() => _results = items);
+      } catch (_) {
+        // silencioso
+      }
+    });
   }
 
   @override
@@ -86,18 +68,96 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
     super.dispose();
   }
 
-  void _onSearchSubmitted(String q) {
+  Future<void> _fetchHistory() async {
+    setState(() => _loadingHistory = true);
+    try {
+      final resp = await ProductsApi.I.getHistory(page: 1, pageSize: 20);
+      if (!mounted) return;
+      setState(() => _history = resp.items);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
+  Future<void> _onSearchSubmitted(String q) async {
     final query = q.trim();
     setState(() {
-      _showPesquisa = query
-          .isNotEmpty; // se tem texto -> “Pesquisa”, senão volta a “Histórico”
+      _showPesquisa = query.isNotEmpty;
+      _loading = query.isNotEmpty;
     });
+    if (query.isEmpty) {
+      setState(() => _results = const []);
+      return;
+    }
+    try {
+      final resp = await ProductsApi.I.searchConfirm(
+        query,
+        page: 1,
+        pageSize: 20,
+      );
+      if (!mounted) return;
+      setState(() => _results = resp.items);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openDetailFromSummary(ProductSummary it) async {
+    await context.pushNamed(
+      'productDetail',
+      extra: {
+        "barcode": it.barcode,
+        "name": it.name,
+        "brand": it.brand,
+        "baseQuantityLabel": "100 g",
+        "kcalPerBase": it.energyKcal100g ?? 0,
+        "nutriScore": it.nutriScore,
+      },
+    );
+    if (!mounted) return;
+    _fetchHistory(); // <-- atualiza a lista ao voltar
+  }
+
+  Future<void> _openDetailFromHistory(ProductHistoryItem h) async {
+    final barcode = h.barcode ?? h.product?.barcode;
+    if (barcode != null && barcode.isNotEmpty) {
+      await context.pushNamed('productDetail', extra: {"barcode": barcode});
+    } else {
+      final p = h.product;
+      await context.pushNamed(
+        'productDetail',
+        extra: {
+          if (p != null) "name": p.name,
+          if (p != null) "brand": p.brand,
+          "baseQuantityLabel": "100 g",
+          "kcalPerBase": p?.energyKcal100g ?? h.calories ?? 0,
+          "nutriScore": p?.nutriScore ?? h.nutriScore ?? '',
+          "proteinGPerBase": h.proteins,
+          "carbsGPerBase": h.carbs,
+          "fatGPerBase": h.fat,
+        },
+      );
+    }
+    if (!mounted) return;
+    _fetchHistory();
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+
+    final showingResults = _showPesquisa;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -135,7 +195,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                               onChanged: (v) =>
                                   setState(() => _selectedMeal = v),
                               chipColor: cs.primary,
-                              textColor: cs.onPrimary, // branco
+                              textColor: cs.onPrimary,
                             ),
                           ),
                         ),
@@ -151,7 +211,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                       controller: _searchCtrl,
                       hintText: "Pesquisar alimento…",
                       textColor: cs.onPrimary,
-                      onSubmitted: _onSearchSubmitted, // NOVO
+                      onSubmitted: _onSearchSubmitted,
                     ),
                   ),
                 ],
@@ -178,46 +238,74 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
             Expanded(
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                itemCount: _history.length + 1,
+                itemCount:
+                    (showingResults ? _results.length : _history.length) + 1,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   if (i == 0) {
                     return Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 8),
-                      child: Text(
-                        _showPesquisa ? "Pesquisa" : "Histórico", // NOVO
-                        style: tt.titleMedium?.copyWith(
-                          color: cs.onSurface,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              showingResults ? "Pesquisa" : "Histórico",
+                              style: tt.titleMedium?.copyWith(
+                                color: cs.onSurface,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          if (!showingResults)
+                            IconButton(
+                              tooltip: "Atualizar histórico",
+                              icon: const Icon(Icons.refresh_rounded),
+                              onPressed: _loadingHistory ? null : _fetchHistory,
+                            ),
+                        ],
                       ),
                     );
                   }
-                  final it = _history[i - 1];
-                  return _HistoryTile(
-                    item: it,
-                    onTap: () {
-                      context.pushNamed(
-                        'productDetail',
-                        extra: {
-                          "name": it.name,
-                          "brand": it.brand,
-                          "origin": "Portugal", // TODO: da API
-                          "baseQuantityLabel": it.quantityLabel,
-                          "kcalPerBase": it.kcal,
-                          "proteinGPerBase": 3.5, // TODO: API
-                          "carbsGPerBase": 7.0, // TODO: API
-                          "fatGPerBase": it.fatG,
-                          "saltGPerBase": it.saltG,
-                          "sugarsGPerBase": it.sugarsG,
-                          "nutriScore": "B", // TODO: API
-                          "ingredients":
-                              "Leite pasteurizado, fermentos lácteos.",
-                          "allergens": "Leite.",
-                          "categories": "Laticínios, Iogurtes naturais",
-                        },
+
+                  if (showingResults) {
+                    if (_loading) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(child: CircularProgressIndicator()),
                       );
-                    },
+                    }
+                    if (_results.isEmpty) return const SizedBox.shrink();
+                    final it = _results[i - 1];
+                    return _ResultTile(
+                      item: it,
+                      onTap: () => _openDetailFromSummary(it),
+                    );
+                  }
+
+                  // Histórico real
+                  if (_loadingHistory && _history.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (_history.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Text(
+                        "Ainda não tens histórico.",
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+
+                  final h = _history[i - 1];
+                  return _HistoryTileReal(
+                    item: h,
+                    onTap: () => _openDetailFromHistory(h),
                   );
                 },
               ),
@@ -231,8 +319,6 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
 
 /* ============================ WIDGETS HERO ============================ */
 
-/// Chip verde com **texto branco + seta** juntos e **centrados**.
-/// Blendado com o fundo (sem sombra/elevation).
 class _MealComboChipCentered extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
@@ -260,7 +346,7 @@ class _MealComboChipCentered extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: const ShapeDecoration(
-        color: Colors.transparent, // verde mais “blendado”
+        color: Colors.transparent,
         shape: StadiumBorder(),
       ),
       child: Theme(
@@ -273,11 +359,10 @@ class _MealComboChipCentered extends StatelessWidget {
           child: DropdownButton<String>(
             value: value,
             isExpanded: true,
-            icon: const SizedBox.shrink(), // desenhamos a nossa seta
+            icon: const SizedBox.shrink(),
             alignment: Alignment.center,
-            dropdownColor: chipColor, // menu verde sólido
+            dropdownColor: chipColor,
             borderRadius: BorderRadius.circular(12),
-            // Texto no botão (centrado + seta) — branco
             selectedItemBuilder: (_) => _meals
                 .map(
                   (m) => Center(
@@ -299,7 +384,6 @@ class _MealComboChipCentered extends StatelessWidget {
                   ),
                 )
                 .toList(),
-            // Itens do menu — texto branco, sem destaque
             items: _meals
                 .map(
                   (m) => DropdownMenuItem<String>(
@@ -311,7 +395,7 @@ class _MealComboChipCentered extends StatelessWidget {
                           m,
                           style: tt.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
-                            color: textColor, // branco
+                            color: textColor,
                           ),
                         ),
                       ),
@@ -329,7 +413,6 @@ class _MealComboChipCentered extends StatelessWidget {
   }
 }
 
-/// Search bar “frosted”
 class _SearchBarHero extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
@@ -406,7 +489,7 @@ class _SearchBarHero extends StatelessWidget {
   }
 }
 
-/* ============================ SCAN (FUNDO CLARO, ÁREA INTERNA VERDE) ============================ */
+/* ============================ SCAN CARD ============================ */
 
 class _ScanCardSurfaceGreen extends StatelessWidget {
   final VoidCallback? onTap;
@@ -484,79 +567,18 @@ class _ScanCardSurfaceGreen extends StatelessWidget {
   }
 }
 
-/* ============================ OUTROS WIDGETS ============================ */
-
-class _TopCurveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final p = Path();
-    p.lineTo(0, 0);
-    p.lineTo(0, size.height);
-    p.quadraticBezierTo(
-      size.width * 0.5,
-      -size.height,
-      size.width,
-      size.height,
-    );
-    p.lineTo(size.width, 0);
-    p.close();
-    return p;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
-}
-
-/* ============================ HISTÓRICO ============================ */
-
-class _HistoryItem {
-  final String name;
-  final int kcal;
-  final String brand;
-  final bool homemade;
-  final bool organic;
-  final String quantityLabel;
-  final double sugarsG;
-  final double fatG;
-  final double saltG;
-  const _HistoryItem({
-    required this.name,
-    required this.kcal,
-    required this.brand,
-    required this.homemade,
-    required this.organic,
-    required this.quantityLabel,
-    required this.sugarsG,
-    required this.fatG,
-    required this.saltG,
-  });
-}
-
-class _HistoryTile extends StatelessWidget {
-  final _HistoryItem item;
+/* ============================ HISTÓRICO (REAL) ============================ */
+/*  SEM IMAGEM  */
+class _HistoryTileReal extends StatelessWidget {
+  final ProductHistoryItem item;
   final VoidCallback? onTap;
-  const _HistoryTile({required this.item, this.onTap});
+  const _HistoryTileReal({required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-
-    Widget tag(String text) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: cs.primary.withValues(alpha: .10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cs.primary.withValues(alpha: .25)),
-      ),
-      child: Text(
-        text,
-        style: tt.labelSmall?.copyWith(
-          color: cs.primary,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+    final p = item.product;
 
     return Material(
       color: cs.surface,
@@ -569,6 +591,7 @@ class _HistoryTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // (sem thumbnail)
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -577,7 +600,7 @@ class _HistoryTile extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            item.name,
+                            (p?.name ?? 'Produto'),
                             style: tt.titleMedium?.copyWith(
                               color: cs.onSurface,
                               fontWeight: FontWeight.w800,
@@ -604,40 +627,24 @@ class _HistoryTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "${item.brand} • ${item.quantityLabel}",
+                      [
+                        if ((p?.brand ?? '').isNotEmpty) p!.brand!,
+                        _fmtDate(item.scannedAt),
+                      ].join(' • '),
                       style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        if (item.homemade) tag("Caseiro"),
-                        if (item.homemade && item.organic)
-                          const SizedBox(width: 6),
-                        if (item.organic) tag("Bio"),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _MiniMetric(
-                          label: "Calorias",
-                          value: "${item.kcal} kcal",
-                        ),
-                        const SizedBox(width: 12),
-                        _MiniMetric(
-                          label: "Açúcares",
-                          value: "${item.sugarsG.toStringAsFixed(1)} g",
-                        ),
-                        const SizedBox(width: 12),
-                        _MiniMetric(
-                          label: "Gord.",
-                          value: "${item.fatG.toStringAsFixed(1)} g",
-                        ),
-                        const SizedBox(width: 12),
-                        _MiniMetric(
-                          label: "Sal",
-                          value: "${item.saltG.toStringAsFixed(2)} g",
-                        ),
+                        if ((item.nutriScore ?? p?.nutriScore ?? '').isNotEmpty)
+                          _NutriTag(grade: (item.nutriScore ?? p?.nutriScore)!),
+                        const SizedBox(width: 8),
+                        if ((p?.energyKcal100g ?? item.calories) != null)
+                          _ChipMetric(
+                            label: "por 100g",
+                            value:
+                                "${(p?.energyKcal100g ?? item.calories)!} kcal",
+                          ),
                       ],
                     ),
                   ],
@@ -649,41 +656,196 @@ class _HistoryTile extends StatelessWidget {
       ),
     );
   }
+
+  String _fmtDate(DateTime d) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return "${two(d.day)}/${two(d.month)}/${d.year}";
+  }
 }
 
-class _MiniMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  const _MiniMetric({required this.label, required this.value});
+/* ============================ UTIL PARTILHADO ============================ */
+
+class _TopCurveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final p = Path();
+    p.lineTo(0, 0);
+    p.lineTo(0, size.height);
+    p.quadraticBezierTo(
+      size.width * 0.5,
+      -size.height,
+      size.width,
+      size.height,
+    );
+    p.lineTo(size.width, 0);
+    p.close();
+    return p;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+/* ============================ RESULT TILE (API) ============================ */
+/*  SEM IMAGEM  */
+class _ResultTile extends StatelessWidget {
+  final ProductSummary item;
+  final VoidCallback? onTap;
+  const _ResultTile({required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: .35),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: tt.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface,
+    final tt = Theme.of(context).textTheme;
+
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // (sem thumbnail)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: tt.titleMedium?.copyWith(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if ((item.brand ?? '').isNotEmpty) item.brand!,
+                        if ((item.categories ?? '').isNotEmpty)
+                          item.categories!,
+                      ].join(' • '),
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if ((item.nutriScore ?? '').isNotEmpty)
+                          _NutriTag(grade: item.nutriScore!),
+                        const SizedBox(width: 8),
+                        if (item.energyKcal100g != null)
+                          _ChipMetric(
+                            label: "por 100g",
+                            value: "${item.energyKcal100g} kcal",
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Material(
+                color: cs.primary,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onTap,
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _ChipMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  const _ChipMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: .35),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: tt.labelSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NutriTag extends StatelessWidget {
+  final String grade;
+  const _NutriTag({required this.grade});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Color nutriColor(String g) {
+      switch (g.toUpperCase()) {
+        case "A":
+          return const Color(0xFF4CAF6D); // Fresh Green
+        case "B":
+          return const Color(0xFF66BB6A); // Leafy Green
+        case "C":
+          return const Color(0xFFFFC107); // Golden Amber
+        case "D":
+          return const Color(0xFFFF8A4C); // Warm Tangerine
+        case "E":
+          return const Color(0xFFE53935); // Ripe Red
+        default:
+          return cs.primary;
+      }
+    }
+
+    final c = nutriColor(grade);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: c.withValues(alpha: .35)),
+      ),
+      child: Text(
+        "NutriScore ${grade.toUpperCase()}",
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w800, color: c),
       ),
     );
   }
