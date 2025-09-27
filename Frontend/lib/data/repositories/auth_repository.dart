@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../auth_api.dart';
 import '../auth_storage.dart';
 
+enum AuthStatus { unknown, unauthenticated, authenticated }
+
 /// Repositório de sessão + notificação do router.
 class AuthRepository {
   // ---- Notificador para o GoRouter reavaliar redirects
@@ -16,32 +18,35 @@ class AuthRepository {
   Stream<void> get authStateChanges => _changes.stream;
 
   // ---- Estado interno
-  bool _isLoggedIn = false;
+  AuthStatus _status = AuthStatus.unknown;
   bool _isLoggingOut = false;
-  bool _onboardingCompleted = false;
+  bool? _onboardingCompleted; // null = desconhecido
   bool _bootstrapped = false;
 
-  bool get isLoggedIn => _isLoggedIn;
+  AuthStatus get status => _status;
+  bool get isLoggedIn => _status == AuthStatus.authenticated;
   bool get isLoggingOut => _isLoggingOut;
-  bool get onboardingCompleted => _onboardingCompleted;
+  bool? get onboardingCompleted => _onboardingCompleted;
   bool get bootstrapped => _bootstrapped;
 
   // ---------------------------------------------------------------------------
   // Ciclo de vida
   // ---------------------------------------------------------------------------
 
-  /// Lê tokens guardados e sincroniza o flag de onboarding.
+  /// Lê tokens guardados e sincroniza o flag de onboarding, com refresh se preciso.
   Future<void> bootstrap() async {
     final access = await AuthStorage.I.readAccessToken();
-    _isLoggedIn = access != null && access.isNotEmpty;
+    final refresh = await AuthStorage.I.readRefreshToken();
+
     AuthApi.I.setAccessToken(access);
 
-    if (_isLoggedIn) {
-      try {
-        _onboardingCompleted = await AuthApi.I.getOnboardingCompleted();
-      } catch (_) {
-        _onboardingCompleted = false;
-      }
+    if (access != null && access.isNotEmpty) {
+      _status = AuthStatus.authenticated;
+      // tenta buscar flags; se der 401 tenta refresh
+      await _fetchFlagsWithRefresh(refreshToken: refresh);
+    } else {
+      _status = AuthStatus.unauthenticated;
+      _onboardingCompleted = null;
     }
 
     _bootstrapped = true;
@@ -57,12 +62,8 @@ class AuthRepository {
     await AuthStorage.I.saveTokens(accessToken, refreshToken);
     AuthApi.I.setAccessToken(accessToken);
 
-    _isLoggedIn = true;
-    try {
-      _onboardingCompleted = await AuthApi.I.getOnboardingCompleted();
-    } catch (_) {
-      _onboardingCompleted = false;
-    }
+    _status = AuthStatus.authenticated;
+    await _fetchFlagsWithRefresh(refreshToken: refreshToken);
 
     _changes.add(null);
     _bumpRouter();
@@ -82,10 +83,8 @@ class AuthRepository {
   /// Apaga a conta no servidor (idempotente para UX).
   Future<void> deleteAccount() async {
     try {
-      await AuthApi.I.deleteAccount(); // se não existir no backend, faz no-op
-    } catch (_) {
-      // ignora falha para não bloquear o utilizador
-    }
+      await AuthApi.I.deleteAccount();
+    } catch (_) {/* no-op */}
   }
 
   /// Logout local (não chama endpoint de logout do server).
@@ -104,25 +103,63 @@ class AuthRepository {
   }
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Refresh & helpers
   // ---------------------------------------------------------------------------
 
+  Future<void> _fetchFlagsWithRefresh({String? refreshToken}) async {
+    try {
+      _onboardingCompleted = await AuthApi.I.getOnboardingCompleted();
+      return;
+    } catch (e) {
+      // tenta refresh só se houver refreshToken
+      final rt = refreshToken ?? await AuthStorage.I.readRefreshToken();
+      if (rt == null || rt.isEmpty) {
+        // sem refresh -> cai para unauth
+        _status = AuthStatus.unauthenticated;
+        _onboardingCompleted = null;
+        return;
+      }
+
+      final ok = await tryRefresh(rt);
+      if (!ok) {
+        _status = AuthStatus.unauthenticated;
+        _onboardingCompleted = null;
+        return;
+      }
+
+      // após refresh, tentar de novo
+      _onboardingCompleted = await AuthApi.I.getOnboardingCompleted();
+    }
+  }
+
+  /// Faz refresh com o backend. True se conseguiu.
+  Future<bool> tryRefresh(String refreshToken) async {
+    try {
+      final t = await AuthApi.I.refresh(refreshToken: refreshToken);
+      await AuthStorage.I.saveTokens(t.accessToken, t.refreshToken);
+      AuthApi.I.setAccessToken(t.accessToken);
+      _status = AuthStatus.authenticated;
+      return true;
+    } catch (_) {
+      await AuthStorage.I.clear();
+      AuthApi.I.setAccessToken(null);
+      return false;
+    }
+  }
+
   Future<void> _clearSessionFlags() async {
-    _isLoggedIn = false;
+    _status = AuthStatus.unauthenticated;
     AuthApi.I.setAccessToken(null);
     await AuthStorage.I.clear();
 
     _isLoggingOut = false;
-    _onboardingCompleted = false;
-
-    // Mantém bootstrapped = true para o router decidir imediatamente
+    _onboardingCompleted = null; // << NÃO assumir false
     _bootstrapped = true;
 
     _changes.add(null);
     _bumpRouter();
   }
 
-  // dispose opcional (se alguma vez fores destruir o repositório)
   void dispose() {
     _changes.close();
     _routerTick.dispose();
