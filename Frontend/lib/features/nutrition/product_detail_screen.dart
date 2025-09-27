@@ -1,46 +1,55 @@
+// lib/features/nutrition/product_detail_screen.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-/// NutriScore — ProductDetailScreen (v8)
-/// - Kcal gigante no centro (não altera o donut)
-/// - Chips de macros
-/// - Dropdown de refeição
-/// - Input de porções (decimais)
-/// - Em “Informação adicional” fica APENAS “Informação nutricional”
+import '../../data/products_api.dart'; // cliente dos endpoints /api/products/*
+
+/// NutriScore — ProductDetailScreen (v9.2 estável)
+/// - Usa ProductsApi.I.getByBarcode(barcode)
+/// - Usa ProductsApi.I.toggleFavorite(barcode)
+/// - Fallback: mostra dados passados no construtor enquanto faz fetch
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({
     super.key,
-    // METADADOS
-    required this.name,
+
+    // Preferencialmente usar barcode para fetch
+    this.barcode,
+
+    // Fallbacks (usados se não houver barcode)
+    this.name,
     this.brand,
-    this.origin, // ex.: "Portugal"
-    required this.baseQuantityLabel, // ex.: "100 g" ou "1 un (18 g)"
-    // NUTRIMENTOS por base (ex.: por 100 g ou por 1 un) — já escalados
-    required this.kcalPerBase,
-    required this.proteinGPerBase,
-    required this.carbsGPerBase,
-    required this.fatGPerBase,
+    this.origin,
+    this.baseQuantityLabel,
+
+    // Nutrimentos por base
+    this.kcalPerBase,
+    this.proteinGPerBase,
+    this.carbsGPerBase,
+    this.fatGPerBase,
     this.saltGPerBase,
     this.sugarsGPerBase,
     this.satFatGPerBase,
     this.fiberGPerBase,
     this.sodiumGPerBase,
 
-    // EXTRA
-    this.nutriScore, // "A".."E"
+    // Extra
+    this.nutriScore,
+    this.initialMeal,
   });
 
-  final String name;
+  final String? barcode;
+
+  final String? name;
   final String? brand;
   final String? origin;
-  final String baseQuantityLabel;
+  final String? baseQuantityLabel;
 
-  final int kcalPerBase;
-  final double proteinGPerBase;
-  final double carbsGPerBase;
-  final double fatGPerBase;
+  final int? kcalPerBase;
+  final double? proteinGPerBase;
+  final double? carbsGPerBase;
+  final double? fatGPerBase;
   final double? saltGPerBase;
   final double? sugarsGPerBase;
   final double? satFatGPerBase;
@@ -48,16 +57,94 @@ class ProductDetailScreen extends StatefulWidget {
   final double? sodiumGPerBase;
 
   final String? nutriScore;
+  final String? initialMeal;
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  String _selectedMeal = "Almoço";
+  late String _selectedMeal;
 
   final TextEditingController _portionCtrl = TextEditingController(text: "1");
   double _portions = 1;
+
+  bool _loading = false;
+  bool _favorited = false;
+
+  // estado do produto
+  String? _name;
+  String? _brand;
+  String? _origin;
+  String _baseLabel = "100 g";
+  String? _nutri;
+
+  int _kcalBase = 0;
+  double _p = 0, _c = 0, _f = 0, _salt = 0, _sugar = 0, _sat = 0, _fiber = 0, _sodium = 0;
+  @override
+  void initState() {
+    super.initState();
+    _selectedMeal = widget.initialMeal ?? "Almoço";
+    _hydrateWithFallback();
+    _maybeFetch();
+  }
+
+  void _hydrateWithFallback() {
+    _name = widget.name;
+    _brand = widget.brand;
+    _origin = widget.origin;
+    _baseLabel = widget.baseQuantityLabel ?? _baseLabel;
+    _nutri = widget.nutriScore;
+
+    _kcalBase = widget.kcalPerBase ?? _kcalBase;
+    _p = widget.proteinGPerBase ?? _p;
+    _c = widget.carbsGPerBase ?? _c;
+    _f = widget.fatGPerBase ?? _f;
+    _salt = widget.saltGPerBase ?? _salt;
+    _sugar = widget.sugarsGPerBase ?? _sugar;
+    _sat = widget.satFatGPerBase ?? _sat;
+    _fiber = widget.fiberGPerBase ?? _fiber;
+    _sodium = widget.sodiumGPerBase ?? _sodium;
+  }
+
+  Future<void> _maybeFetch() async {
+    final bc = widget.barcode;
+    if (bc == null || bc.isEmpty) return;
+
+    setState(() => _loading = true);
+    try {
+      final d = await ProductsApi.I.getByBarcode(bc);
+      if (!mounted) return;
+
+      final hasServ = d.kcalServ != null && d.kcalServ! > 0;
+
+      setState(() {
+        _name = d.name;
+        _brand = d.brand;
+        _origin = (d.origin ?? '').split(',').first.trim().isEmpty ? null : d.origin;
+        _nutri = d.nutriScore;
+
+        _baseLabel = hasServ ? (d.servingSize ?? _baseLabel) : (d.quantity ?? _baseLabel);
+        _kcalBase = (hasServ ? d.kcalServ : d.kcal100g) ?? _kcalBase;
+
+        _p = (hasServ ? d.proteinServ : d.protein100g) ?? _p;
+        _c = (hasServ ? d.carbsServ : d.carbs100g) ?? _c;
+        _f = (hasServ ? d.fatServ : d.fat100g) ?? _f;
+        _salt = (hasServ ? d.saltServ : d.salt100g) ?? _salt;
+        _sugar = (hasServ ? d.sugarsServ : d.sugars100g) ?? _sugar;
+        _sat = (hasServ ? d.satFatServ : d.satFat100g) ?? _sat;
+        _fiber = (hasServ ? d.fiberServ : d.fiber100g) ?? _fiber;
+        _sodium = (hasServ ? d.sodiumServ : d.sodium100g) ?? _sodium;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -70,15 +157,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    final kcal = (widget.kcalPerBase * _portions).round();
-    final protein = widget.proteinGPerBase * _portions;
-    final carbs = widget.carbsGPerBase * _portions;
-    final fat = widget.fatGPerBase * _portions;
-    final salt = (widget.saltGPerBase ?? 0) * _portions;
-    final sugar = (widget.sugarsGPerBase ?? 0) * _portions;
-    final satFat = (widget.satFatGPerBase ?? 0) * _portions;
-    final fiber = (widget.fiberGPerBase ?? 0) * _portions;
-    final sodium = (widget.sodiumGPerBase ?? 0) * _portions;
+    final kcal = (_kcalBase * _portions).round();
+    final protein = _p * _portions;
+    final carbs = _c * _portions;
+    final fat = _f * _portions;
+    final salt = _salt * _portions;
+    final sugar = _sugar * _portions;
+    final satFat = _sat * _portions;
+    final fiber = _fiber * _portions;
+    final sodium = _sodium * _portions;
 
     // kcal por macro (P=4, C=4, G=9) — apenas para o donut
     final pKcal = protein * 4;
@@ -97,11 +184,70 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         bottom: false,
         child: CustomScrollView(
           slivers: [
-            // HERO topo com voltar + título
+            // HERO topo com voltar + favorito
             SliverToBoxAdapter(
-              child: _HeroTopBar(
-                title: "Detalhe do alimento",
-                onBack: () => context.pop(),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [cs.primary, cs.tertiary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            tooltip: "Voltar",
+                            icon: const Icon(Icons.arrow_back_rounded),
+                            color: cs.onPrimary,
+                            onPressed: () => context.pop(),
+                          ),
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                "Detalhe do alimento",
+                                style: tt.titleLarge?.copyWith(
+                                  color: cs.onPrimary,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: "Favorito",
+                            icon: Icon(
+                              _favorited
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              color: cs.onPrimary,
+                            ),
+                            onPressed: (widget.barcode == null)
+                                ? null
+                                : () async {
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    try {
+                                      final fav = await ProductsApi.I
+                                          .toggleFavorite(widget.barcode!);
+                                      if (!mounted) return;
+                                      setState(() => _favorited = fav);
+                                    } catch (e) {
+                                      if (!mounted) return;
+                                      messenger.showSnackBar(
+                                        SnackBar(content: Text(e.toString())),
+                                      );
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -116,13 +262,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               sliver: SliverToBoxAdapter(
                 child: _InfoCard(
-                  title: widget.name,
+                  title: _name ?? 'Produto',
                   subtitle: [
-                    if (widget.brand?.isNotEmpty == true) widget.brand!,
-                    if (widget.origin?.isNotEmpty == true) widget.origin!,
-                    widget.baseQuantityLabel,
+                    if ((_brand ?? '').isNotEmpty) _brand!,
+                    if ((_origin ?? '').isNotEmpty) _origin!,
+                    _baseLabel,
                   ].where((s) => s.isNotEmpty).join(" • "),
-                  nutriScore: widget.nutriScore,
+                  nutriScore: _nutri,
                 ),
               ),
             ),
@@ -134,21 +280,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerHighest.withValues(alpha: .35),
+
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // DONUT – kcal gigante no centro
-                      SizedBox.square(
-                        dimension: 260,
-                        child: _MacroDonut(
-                          totalKcal: kcal.toDouble(),
-                          proteinKcal: pKcalScaled,
-                          carbsKcal: cKcalScaled,
-                          fatKcal: fKcalScaled,
+                      if (_loading)
+                        const SizedBox(
+                          height: 220,
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else
+                        SizedBox.square(
+                          dimension: 260,
+                          child: _MacroDonut(
+                            totalKcal: kcal.toDouble(),
+                            proteinKcal: pKcalScaled,
+                            carbsKcal: cKcalScaled,
+                            fatKcal: fKcalScaled,
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 12),
 
                       // Chips macro
@@ -192,7 +344,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                       _PortionInput(
                         controller: _portionCtrl,
-                        baseLabel: widget.baseQuantityLabel,
+                        baseLabel: _baseLabel,
                         onChanged: (val) => setState(() => _portions = val),
                       ),
                     ],
@@ -221,19 +373,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       title: "Informação nutricional",
                       body: "",
                       childBuilder: (_) => _NutritionInfo(
-                        baseLabel: widget.baseQuantityLabel,
+                        baseLabel: _baseLabel,
                         kcal: kcal,
                         protein: protein,
                         carbs: carbs,
-                        sugars:
-                            (widget.sugarsGPerBase != null) ? sugar : null,
+                        sugars: _sugar > 0 ? sugar : null,
                         fat: fat,
-                        satFat:
-                            (widget.satFatGPerBase != null) ? satFat : null,
-                        fiber: (widget.fiberGPerBase != null) ? fiber : null,
-                        salt: (widget.saltGPerBase != null) ? salt : null,
-                        sodium:
-                            (widget.sodiumGPerBase != null) ? sodium : null,
+                        satFat: _sat > 0 ? satFat : null,
+                        fiber: _fiber > 0 ? fiber : null,
+                        salt: _salt > 0 ? salt : null,
+                        sodium: _sodium > 0 ? sodium : null,
                       ),
                     ),
                   ],
@@ -311,59 +460,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 }
 
-/* ========================= HERO ========================= */
-
-class _HeroTopBar extends StatelessWidget {
-  final String title;
-  final VoidCallback onBack;
-  const _HeroTopBar({required this.title, required this.onBack});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [cs.primary, cs.tertiary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: "Voltar",
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  color: cs.onPrimary,
-                  onPressed: onBack,
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      title,
-                      style: tt.titleLarge?.copyWith(
-                        color: cs.onPrimary,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-      ),
-    );
-  }
-}
-
 /* =================== WIDGETS SECUNDÁRIOS =================== */
 
 class _InfoCard extends StatelessWidget {
@@ -384,15 +480,15 @@ class _InfoCard extends StatelessWidget {
     Color nutriColor(String g) {
       switch (g.toUpperCase()) {
         case "A":
-          return const Color(0xFF4CAF6D); // Fresh Green
+          return const Color(0xFF4CAF6D);
         case "B":
-          return const Color(0xFF66BB6A); // Leafy Green
+          return const Color(0xFF66BB6A);
         case "C":
-          return const Color(0xFFFFC107); // Golden Amber
+          return const Color(0xFFFFC107);
         case "D":
-          return const Color(0xFFFF8A4C); // Warm Tangerine
+          return const Color(0xFFFF8A4C);
         case "E":
-          return const Color(0xFFE53935); // Ripe Red
+          return const Color(0xFFE53935);
         default:
           return cs.primary;
       }
@@ -451,8 +547,6 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-/* =================== DROPDOWN REFEIÇÃO =================== */
-
 class _MealDropdown extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
@@ -507,8 +601,6 @@ class _MealDropdown extends StatelessWidget {
     );
   }
 }
-
-/* =================== INPUT PORÇÕES =================== */
 
 class _PortionInput extends StatelessWidget {
   final TextEditingController controller;
@@ -567,8 +659,6 @@ class _PortionInput extends StatelessWidget {
   }
 }
 
-/* =================== EXPANDABLE INFO =================== */
-
 class _ExpandableInfo extends StatefulWidget {
   final String title;
   final String body;
@@ -584,7 +674,7 @@ class _ExpandableInfo extends StatefulWidget {
 }
 
 class _ExpandableInfoState extends State<_ExpandableInfo> {
-  bool _open = true; // já abre expandido — opcional
+  bool _open = true;
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -669,15 +759,12 @@ class _NutritionInfo extends StatelessWidget {
       _NutriRow("Energia", "$kcal kcal"),
       _NutriRow("Proteína", "${protein.toStringAsFixed(1)} g"),
       _NutriRow("Hidratos de carbono", "${carbs.toStringAsFixed(1)} g"),
-      if (sugars != null)
-        _NutriRow("Açúcares", "${sugars!.toStringAsFixed(1)} g"),
+      if (sugars != null) _NutriRow("Açúcares", "${sugars!.toStringAsFixed(1)} g"),
       _NutriRow("Gordura", "${fat.toStringAsFixed(1)} g"),
-      if (satFat != null)
-        _NutriRow("Gordura saturada", "${satFat!.toStringAsFixed(1)} g"),
+      if (satFat != null) _NutriRow("Gordura saturada", "${satFat!.toStringAsFixed(1)} g"),
       if (fiber != null) _NutriRow("Fibra", "${fiber!.toStringAsFixed(1)} g"),
       if (salt != null) _NutriRow("Sal", "${salt!.toStringAsFixed(2)} g"),
-      if (sodium != null)
-        _NutriRow("Sódio", "${sodium!.toStringAsFixed(2)} g"),
+      if (sodium != null) _NutriRow("Sódio", "${sodium!.toStringAsFixed(2)} g"),
     ];
 
     return Column(
