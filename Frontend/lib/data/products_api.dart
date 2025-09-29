@@ -1,12 +1,17 @@
 // lib/data/products_api.dart
 import 'package:dio/dio.dart';
 
-import 'auth_api.dart'; // para baseUrl
-import 'auth_storage.dart'; // para ler/gravar tokens
-import '../app/di.dart';
+import 'auth_api.dart';          // baseUrl
+import 'auth_storage.dart';      // access/refresh tokens
+import '../app/di.dart';         // di.authRepository (refresh token)
 
-/* ===================== HELPERS NUMÉRICOS (top-level) ===================== */
-// NÃO usar 'static' no top-level.
+/* ===================== HELPERS (top-level) ===================== */
+// NÃO uses "static" no top-level.
+
+String? _str(dynamic v) => v?.toString();
+
+String? _upper(dynamic v) => v?.toString().toUpperCase();
+
 double? _d(dynamic v) {
   if (v == null) return null;
   if (v is num) return v.toDouble();
@@ -16,9 +21,16 @@ double? _d(dynamic v) {
   }
   return null;
 }
+
 int? _i(dynamic v) => _d(v)?.round();
 
-/* ===================== MODELOS (top-level) ===================== */
+String? _catsToString(dynamic v) {
+  if (v == null) return null;
+  if (v is List) return v.map((e) => e.toString()).join(', ');
+  return v.toString();
+}
+
+/* ===================== MODELOS ===================== */
 
 class ProductSummary {
   final String barcode;
@@ -40,14 +52,19 @@ class ProductSummary {
   });
 
   factory ProductSummary.fromJson(Map<String, dynamic> j) => ProductSummary(
-        barcode: j['barcode'] as String,
-        name: (j['name'] ?? '') as String,
-        brand: j['brand'] as String?,
-        imageUrl: j['imageUrl'] as String?,
-        categories: j['categories'] as String?,
-        nutriScore: (j['nutriScore'] as String?)?.toUpperCase(),
-        // aceita String ou num
-        energyKcal100g: _i(j['energyKcal_100g']),
+        barcode: (_str(j['barcode']) ?? '').toString(),
+        name: _str(j['name'] ?? j['product_name'] ?? 'Produto')!,
+        brand: _str(j['brand'] ?? j['brands']),
+        imageUrl: _str(j['imageUrl'] ?? j['image_url']),
+        categories: _catsToString(j['categories'] ?? j['category']),
+        nutriScore: _upper(j['nutriScore'] ?? j['nutriscore'] ?? j['nutriscore_grade']),
+        energyKcal100g: _i(
+          j['energyKcal100g'] ??
+          j['energyKcal_100g'] ??
+          j['energy-kcal_100g'] ??
+          j['kcal_100g'] ??
+          j['energy-kcal_100g_value'],
+        ),
       );
 }
 
@@ -55,13 +72,13 @@ class ProductDetail {
   final String barcode;
   final String name;
   final String? brand;
-  final String? origin; // podes mapear de countries
-  final String? servingSize;
-  final String? quantity; // ex "100 g"
+  final String? origin;       // ex: countries
+  final String? servingSize;  // ex: "30 g"
+  final String? quantity;     // ex: "100 g"
   final String? imageUrl;
-  final String? nutriScore; // A..E
+  final String? nutriScore;   // A..E
 
-  // 100g
+  // por 100 g
   final int? kcal100g;
   final double? protein100g;
   final double? carbs100g;
@@ -72,7 +89,7 @@ class ProductDetail {
   final double? salt100g;
   final double? sodium100g;
 
-  // por porção (se existir)
+  // por porção
   final int? kcalServ;
   final double? proteinServ;
   final double? carbsServ;
@@ -113,37 +130,38 @@ class ProductDetail {
   });
 
   factory ProductDetail.fromJson(Map<String, dynamic> j) => ProductDetail(
-        barcode: j['barcode'] as String,
-        name: (j['name'] ?? '') as String,
-        brand: j['brand'] as String?,
-        origin: j['countries'] as String?,
-        servingSize: j['servingSize'] as String?,
-        quantity: j['quantity'] as String?,
-        imageUrl: j['imageUrl'] as String?,
-        nutriScore: (j['nutriScore'] as String?)?.toUpperCase(),
-        // ---- todos os numéricos via helpers (_d/_i) ----
-        kcal100g: _i(j['energyKcal_100g']),
-        protein100g: _d(j['proteins_100g']),
-        carbs100g: _d(j['carbs_100g']),
+        barcode: (_str(j['barcode']) ?? '').toString(),
+        name: _str(j['name'] ?? j['product_name'] ?? 'Produto')!,
+        brand: _str(j['brand'] ?? j['brands']),
+        origin: _catsToString(j['countries'] ?? j['origins']),
+        servingSize: _str(j['servingSize'] ?? j['serving_size']),
+        quantity: _str(j['quantity']),
+        imageUrl: _str(j['imageUrl'] ?? j['image_url']),
+        nutriScore: _upper(j['nutriScore'] ?? j['nutriscore'] ?? j['nutriscore_grade']),
+        // 100g
+        kcal100g: _i(j['energyKcal100g'] ?? j['energyKcal_100g'] ?? j['energy-kcal_100g'] ?? j['kcal_100g']),
+        protein100g: _d(j['proteins_100g'] ?? j['protein_100g']),
+        carbs100g: _d(j['carbs_100g'] ?? j['carbohydrates_100g']),
         sugars100g: _d(j['sugars_100g']),
         fat100g: _d(j['fat_100g']),
-        satFat100g: _d(j['satFat_100g']),
+        satFat100g: _d(j['satFat_100g'] ?? j['saturated-fat_100g']),
         fiber100g: _d(j['fiber_100g']),
         salt100g: _d(j['salt_100g']),
         sodium100g: _d(j['sodium_100g']),
-        kcalServ: _i(j['energyKcal_serv']),
-        proteinServ: _d(j['proteins_serv']),
-        carbsServ: _d(j['carbs_serv']),
-        sugarsServ: _d(j['sugars_serv']),
-        fatServ: _d(j['fat_serv']),
-        satFatServ: _d(j['satFat_serv']),
-        fiberServ: _d(j['fiber_serv']),
-        saltServ: _d(j['salt_serv']),
-        sodiumServ: _d(j['sodium_serv']),
+        // porção
+        kcalServ: _i(j['energyKcal_serv'] ?? j['energy-kcal_serving'] ?? j['kcal_serving']),
+        proteinServ: _d(j['proteins_serv'] ?? j['protein_serving']),
+        carbsServ: _d(j['carbs_serv'] ?? j['carbohydrates_serving']),
+        sugarsServ: _d(j['sugars_serv'] ?? j['sugars_serving']),
+        fatServ: _d(j['fat_serv'] ?? j['fat_serving']),
+        satFatServ: _d(j['satFat_serv'] ?? j['saturated-fat_serving']),
+        fiberServ: _d(j['fiber_serv'] ?? j['fiber_serving']),
+        saltServ: _d(j['salt_serv'] ?? j['salt_serving']),
+        sodiumServ: _d(j['sodium_serv'] ?? j['sodium_serving']),
       );
 }
 
-/* ============== MODELOS — HISTÓRICO (novo) ============== */
+/* ============ HISTÓRICO ============ */
 
 class ProductMini {
   final String barcode;
@@ -163,17 +181,19 @@ class ProductMini {
   });
 
   factory ProductMini.fromJson(Map<String, dynamic> j) => ProductMini(
-        barcode: j['barcode'] as String,
-        name: (j['name'] ?? '') as String,
-        brand: j['brand'] as String?,
-        imageUrl: j['imageUrl'] as String?,
-        nutriScore: (j['nutriScore'] as String?)?.toUpperCase(),
-        energyKcal100g: _i(j['energyKcal_100g']),
+        barcode: (_str(j['barcode']) ?? '').toString(),
+        name: _str(j['name'] ?? j['product_name'] ?? 'Produto')!,
+        brand: _str(j['brand'] ?? j['brands']),
+        imageUrl: _str(j['imageUrl'] ?? j['image_url']),
+        nutriScore: _upper(j['nutriScore'] ?? j['nutriscore'] ?? j['nutriscore_grade']),
+        energyKcal100g: _i(
+          j['energyKcal100g'] ?? j['energyKcal_100g'] ?? j['energy-kcal_100g'] ?? j['kcal_100g'],
+        ),
       );
 }
 
 class ProductHistoryItem {
-  final int id; // BigInt no backend — chega como num (ou string após fix)
+  final int id; // BigInt no backend pode vir string/num
   final DateTime scannedAt;
   final String? barcode;
   final String? nutriScore;
@@ -181,8 +201,6 @@ class ProductHistoryItem {
   final double? proteins;
   final double? carbs;
   final double? fat;
-
-  // Produto "mini" incluído (pode ser null se foi apagado entretanto)
   final ProductMini? product;
 
   ProductHistoryItem({
@@ -197,28 +215,46 @@ class ProductHistoryItem {
     required this.product,
   });
 
-  factory ProductHistoryItem.fromJson(Map<String, dynamic> j) => ProductHistoryItem(
-        id: (j['id'] is String) ? int.parse(j['id'] as String) : (j['id'] as num).toInt(),
-        scannedAt: DateTime.parse(j['scannedAt'] as String),
-        barcode: j['barcode'] as String?,
-        nutriScore: (j['nutriScore'] as String?)?.toUpperCase(),
-        calories: _i(j['calories']),
-        proteins: _d(j['proteins']),
-        carbs: _d(j['carbs']),
-        fat: _d(j['fat']),
-        product: (j['product'] is Map && j['product'] != null)
-            ? ProductMini.fromJson((j['product'] as Map).cast<String, dynamic>())
-            : null,
-      );
+  factory ProductHistoryItem.fromJson(Map<String, dynamic> j) {
+    int parseId(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v) ?? 0;
+      return 0;
+    }
+
+    DateTime parseDate(dynamic raw) {
+      if (raw is String && raw.contains('T')) return DateTime.parse(raw).toLocal();
+      if (raw is String && raw.isNotEmpty) return DateTime.parse('${raw}T00:00:00').toLocal();
+      if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw).toLocal();
+      return DateTime.now();
+    }
+
+    final prod = (j['product'] is Map)
+        ? ProductMini.fromJson(Map<String, dynamic>.from(j['product'] as Map))
+        : null;
+
+    return ProductHistoryItem(
+      id: parseId(j['id']),
+      scannedAt: parseDate(j['scannedAt'] ?? j['createdAt'] ?? j['at']),
+      barcode: _str(j['barcode']),
+      nutriScore: _upper(j['nutriScore'] ?? j['nutriscore'] ?? j['nutriscore_grade']),
+      calories: _i(j['calories'] ?? j['kcal']),
+      proteins: _d(j['proteins'] ?? j['protein']),
+      carbs: _d(j['carbs'] ?? j['carbohydrates']),
+      fat: _d(j['fat']),
+      product: prod,
+    );
+  }
 }
 
-/* ===================== API ===================== */
+/* ===================== CLIENTE API ===================== */
 
 class ProductsApi {
   ProductsApi._();
   static final ProductsApi I = ProductsApi._();
 
-  String get baseUrl => AuthApi.baseUrl; // normalmente já inclui /api
+  String get baseUrl => AuthApi.baseUrl; // costuma já incluir /api
   static const String pathPrefix = '/products';
 
   final Dio _dio = Dio(
@@ -243,7 +279,7 @@ class ProductsApi {
     return {'Authorization': 'Bearer $token'};
   }
 
-  /// GET autenticado com refresh automático em 401 (retry 1x)
+  /// GET autenticado com refresh automático (1x) em 401
   Future<Response<dynamic>> _getAuthed(Uri uri) async {
     Map<String, String> headers = await _authHeaders(requireJwt: true);
     try {
@@ -254,20 +290,24 @@ class ProductsApi {
         try {
           final rt = await AuthStorage.I.readRefreshToken();
           if (rt != null && rt.isNotEmpty) {
-            try {
-              final ok = await di.authRepository.tryRefresh(rt);
-              if (ok) {
-                headers = await _authHeaders(requireJwt: true); // novo access
-                return await _dio.getUri(uri, options: Options(headers: headers));
-              }
-            } catch (_) {}
+            final ok = await di.authRepository.tryRefresh(rt);
+            if (ok) {
+              headers = await _authHeaders(requireJwt: true);
+              return await _dio.getUri(uri, options: Options(headers: headers));
+            }
           } else {
-            try { await di.authRepository.expireSession(); } catch (_) {}
+            await di.authRepository.expireSession();
           }
         } catch (_) {}
       }
       rethrow;
     }
+  }
+
+  /// POST autenticado (para favorito)
+  Future<Response<dynamic>> _postAuthed(Uri uri, {Object? data}) async {
+    final headers = await _authHeaders(requireJwt: true);
+    return _dio.postUri(uri, data: data, options: Options(headers: headers));
   }
 
   /* ============ Endpoints públicos ============ */
@@ -365,9 +405,8 @@ class ProductsApi {
   // POST /products/:barcode/favorite (JWT)
   Future<bool> toggleFavorite(String barcode) async {
     try {
-      final headers = await _authHeaders(requireJwt: true);
       final uri = Uri.parse('$baseUrl$pathPrefix/$barcode/favorite');
-      final res = await _dio.postUri(uri, options: Options(headers: headers));
+      final res = await _postAuthed(uri);
       if (res.statusCode != 201 && res.statusCode != 200) {
         throw 'HTTP ${res.statusCode}';
       }
