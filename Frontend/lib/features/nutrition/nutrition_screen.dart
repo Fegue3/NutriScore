@@ -15,7 +15,6 @@ class _NutritionScreenState extends State<NutritionScreen> {
   // ===== Navegação por dia =====
   int _dayOffset = 0; // 0=Hoje, -1=Ontem, 1=Amanhã…
   int _slideDir = 0;
-
   // ===== Estado calorias (resumo topo) =====
   final int _fallbackDailyGoal = 2200;
   int? _dailyGoalFromApi;
@@ -23,15 +22,20 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
   int get _goal => _dailyGoalFromApi ?? _fallbackDailyGoal;
   int get _consumed {
-    // Preferimos o valor do CalorieApi; se não vier, somamos as entradas
-    final api = _consumedFromApi;
-    if (api != null) return api;
-    int sum = 0;
-    for (final e in _entries) {
-      final c = e.calories;
-      if (c != null) sum += c.round();
+    if (_entries.isNotEmpty) {
+      int sum = 0;
+      for (final e in _entries) {
+        final c = e.calories;
+        if (c != null) sum += c.round();
+      }
+      return sum;
     }
-    return sum;
+    return _consumedFromApi ?? 0;
+  }
+
+  String get _ymd {
+    final d = DateTime.now().add(Duration(days: _dayOffset));
+    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
   // ===== Estado das refeições (MealsApi) =====
@@ -116,15 +120,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
     final meal = Uri.encodeComponent(mealTitle);
 
     // dia atualmente selecionado no ecrã (offset aplicado)
-    final selectedDate = DateTime.now().add(Duration(days: _dayOffset));
-
-    // usa uma rota nomeada OU mantém a atual, mas passa a data em `extra`
-    await context.push(
-      '/add-food?meal=$meal',
-      extra: {
-        'selectedDate': selectedDate,
-      },
-    );
+    await context.push('/add-food?meal=$meal&date=$_ymd');
 
     if (!mounted) return;
     _fetchForOffset(_dayOffset); // refresh ao voltar
@@ -132,7 +128,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
   Future<void> _removeEntry(MealEntry e) async {
     try {
-      await MealsApi.I.remove(e.id);
+      await MealsApi.I.deleteItemById(e.id);
       if (!mounted) return;
       setState(() => _entries = _entries.where((x) => x.id != e.id).toList());
     } catch (err) {
@@ -373,6 +369,7 @@ class _DayContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).padding.bottom;
+    //final allEmpty = brk.isEmpty && lun.isEmpty && snk.isEmpty && din.isEmpty;
     return ScrollConfiguration(
       behavior: const _BounceScrollBehavior(),
       child: ListView(
@@ -387,6 +384,7 @@ class _DayContent extends StatelessWidget {
             items: brk,
             onAddTap: () => onTapAddFood("Pequeno-almoço"),
             onRemove: onRemove,
+            initiallyExpanded: brk.isNotEmpty,
           ),
           const SizedBox(height: 16),
           _MealSection(
@@ -395,6 +393,7 @@ class _DayContent extends StatelessWidget {
             items: lun,
             onAddTap: () => onTapAddFood("Almoço"),
             onRemove: onRemove,
+            initiallyExpanded: lun.isNotEmpty, // default
           ),
           const SizedBox(height: 16),
           _MealSection(
@@ -403,6 +402,7 @@ class _DayContent extends StatelessWidget {
             items: snk,
             onAddTap: () => onTapAddFood("Lanche"),
             onRemove: onRemove,
+            initiallyExpanded: snk.isNotEmpty,
           ),
           const SizedBox(height: 16),
           _MealSection(
@@ -411,6 +411,7 @@ class _DayContent extends StatelessWidget {
             items: din,
             onAddTap: () => onTapAddFood("Jantar"),
             onRemove: onRemove,
+            initiallyExpanded: din.isNotEmpty,
           ),
           const SizedBox(height: 16),
           const _WaterCard(),
@@ -599,6 +600,7 @@ class _MealSection extends StatefulWidget {
   final List<MealEntry> items;
   final VoidCallback? onAddTap;
   final void Function(MealEntry e)? onRemove;
+  final bool initiallyExpanded;
 
   const _MealSection({
     required this.title,
@@ -606,6 +608,7 @@ class _MealSection extends StatefulWidget {
     required this.items,
     this.onAddTap,
     this.onRemove,
+    this.initiallyExpanded = false,
   });
 
   @override
@@ -613,7 +616,23 @@ class _MealSection extends StatefulWidget {
 }
 
 class _MealSectionState extends State<_MealSection> {
-  bool _expanded = false;
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
+  void didUpdateWidget(covariant _MealSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Se uma secção que estava vazia passou a ter itens, abrimo-la.
+    if (!oldWidget.items.isNotEmpty && widget.items.isNotEmpty) {
+      _expanded = true;
+    }
+  }
+
   void _toggle() => setState(() => _expanded = !_expanded);
 
   @override
@@ -768,58 +787,131 @@ class _MealItemsList extends StatelessWidget {
     return Column(
       children: items.map((e) {
         final kcal = (e.calories ?? 0).round();
+
+        // Subtítulo: marca • barcode
         final subtitleParts = <String>[];
         if ((e.brand ?? '').isNotEmpty) subtitleParts.add(e.brand!);
         final bc = e.barcode?.trim();
         if (bc != null && bc.isNotEmpty) subtitleParts.add(bc);
 
+        // Quantidade human friendly
+        String? qtyLabel;
+        if (e.quantityGrams != null) {
+          qtyLabel = '${e.quantityGrams!.round()} g';
+        } else if (e.quantityMl != null) {
+          qtyLabel = '${e.quantityMl!.round()} ml';
+        } else if (e.servings != null) {
+          qtyLabel = (e.servings! % 1 == 0)
+              ? '${e.servings!.toInt()} porção(ões)'
+              : '${e.servings!.toStringAsFixed(1)} porções';
+        }
+
         return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: cs.surface,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: cs.outlineVariant),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      e.name,
-                      style: tt.titleSmall?.copyWith(
-                        color: cs.onSurface,
-                        fontWeight: FontWeight.w800,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // NOME (agora vem do backend)
+                        Text(
+                          e.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        if (subtitleParts.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              subtitleParts.join(' • '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        if (qtyLabel != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              qtyLabel,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // badge kcal
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: ShapeDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: const StadiumBorder(),
+                    ),
+                    child: Text(
+                      "$kcal kcal",
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: .2,
                       ),
                     ),
-                    if (subtitleParts.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          subtitleParts.join(' • '),
-                          style: tt.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // remover — maior e alinhado
+                  IconButton(
+                    tooltip: 'Remover',
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    iconSize: 22, // ↑ antes estava ~18
+                    padding: const EdgeInsets.all(8),
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    onPressed: (onRemove == null) ? null : () => onRemove!(e),
+                  ),
+
+                  const SizedBox(width: 6),
+
+                ],
               ),
-              Text(
-                "$kcal kcal",
-                style: tt.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Remover',
-                icon: Icon(Icons.delete_outline_rounded, color: cs.error),
-                onPressed: (onRemove == null) ? null : () => onRemove!(e),
-              ),
+              // (se não quiseres NutriScore/macro aqui, podes deixar só isto)
             ],
           ),
         );
