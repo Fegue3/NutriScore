@@ -11,20 +11,20 @@ enum MealType { breakfast, lunch, snack, dinner }
 
 extension MealTypeX on MealType {
   String get api => switch (this) {
-        MealType.breakfast => 'breakfast',
-        MealType.lunch => 'lunch',
-        MealType.snack => 'snack',
-        MealType.dinner => 'dinner',
-      };
+    MealType.breakfast => 'breakfast',
+    MealType.lunch => 'lunch',
+    MealType.snack => 'snack',
+    MealType.dinner => 'dinner',
+  };
 
   String get apiCaps => api.toUpperCase();
 
   String get labelPt => switch (this) {
-        MealType.breakfast => 'Pequeno-almoço',
-        MealType.lunch => 'Almoço',
-        MealType.snack => 'Lanche',
-        MealType.dinner => 'Jantar',
-      };
+    MealType.breakfast => 'Pequeno-almoço',
+    MealType.lunch => 'Almoço',
+    MealType.snack => 'Lanche',
+    MealType.dinner => 'Jantar',
+  };
 
   static MealType fromApi(String? v) {
     final s = (v ?? '').trim().toLowerCase();
@@ -38,7 +38,9 @@ extension MealTypeX on MealType {
   }
 
   static MealType? fromLabelPt(String? label) {
-    if (label == null) return null;
+    if (label == null) {
+      return null;
+    }
     final s = label.trim().toLowerCase();
     if (s.contains('pequeno')) return MealType.breakfast;
     if (s.contains('almo')) return MealType.lunch;
@@ -62,8 +64,11 @@ class MealEntry {
   final num? carbs;
   final num? protein;
   final num? fat;
-  final num? quantityGrams;
-  final num? servings;
+
+  // QUANTIDADES
+  final num? quantityGrams; // unit=GRAM
+  final num? quantityMl; // unit=ML
+  final num? servings; // unit=PIECE
 
   MealEntry({
     required this.id,
@@ -78,6 +83,7 @@ class MealEntry {
     this.protein,
     this.fat,
     this.quantityGrams,
+    this.quantityMl,
     this.servings,
   });
 
@@ -102,32 +108,96 @@ class MealEntry {
       return null;
     }
 
+    final Map<String, dynamic>? p = (j['product'] is Map)
+        ? Map<String, dynamic>.from(j['product'])
+        : null;
+
+    T? pick<T>(String k) {
+      final v = j[k];
+      if (v != null) {
+        return v as T?;
+      }
+      if (p != null && p[k] != null) {
+        return p[k] as T?;
+      }
+      return null;
+    }
+
+    // nome/brand/barcode tentam várias chaves comuns
+    String nameFrom() {
+      return (pick<String>('name') ??
+              pick<String>('productName') ??
+              pick<String>('product_name') ??
+              pick<String>('title') ??
+              'Produto')
+          .toString();
+    }
+
+    String? brandFrom() {
+      return (pick<String>('brand') ??
+              pick<String>('brands') ??
+              pick<String>('brand_name'))
+          ?.toString();
+    }
+
+    String? barcodeFrom() {
+      return (pick<String>('barcode') ??
+              pick<String>('code') ??
+              pick<String>('ean'))
+          ?.toString();
+    }
+
+    num? kcalFrom() {
+      return numOrNull(
+        j['calories'] ?? j['kcal'] ?? p?['calories'] ?? p?['kcal'],
+      );
+    }
+
+    // -------- unit + quantity -> normalizamos para os 3 campos --------
+    final unit = (j['unit'] ?? '')
+        .toString()
+        .toUpperCase(); // "GRAM" | "ML" | "PIECE"
+    final q = numOrNull(j['quantity']);
+    num? qG;
+    num? qMl;
+    num? qServ;
+    if (q != null) {
+      if (unit == 'GRAM') {
+        qG = q;
+      } else if (unit == 'ML') {
+        qMl = q;
+      } else if (unit == 'PIECE') {
+        qServ = q;
+      }
+    }
+
+    // Fallbacks (compatibilidade com versões antigas)
+    qG ??= numOrNull(j['quantityGrams'] ?? p?['quantityGrams']);
+    qServ ??= numOrNull(j['servings'] ?? p?['servings']);
+
     return MealEntry(
       id: (j['id'] ?? j['_id'] ?? '').toString(),
       at: parseDate(j['at'] ?? j['date'] ?? j['createdAt']),
       meal: MealTypeX.fromApi(
         (j['meal'] ?? j['mealType'] ?? j['type'])?.toString(),
       ),
-      name: (j['name'] ?? j['productName'] ?? 'Produto').toString(),
-      brand: j['brand']?.toString(),
-      barcode: j['barcode']?.toString(),
-      nutriScore: (j['nutriScore'] ??
-              j['nutriscore'] ??
-              j['nutri_score'])
-          ?.toString()
-          .toUpperCase(),
-      calories: numOrNull(j['calories'] ?? j['kcal']),
-      carbs: numOrNull(j['carbs']),
-      protein: numOrNull(j['protein']),
-      fat: numOrNull(j['fat']),
-      quantityGrams: numOrNull(
-        j['quantityGrams'] ??
-            j['quantity'] ??
-            j['grams'] ??
-            j['quantity_grams'],
-      ),
-      servings:
-          numOrNull(j['servings'] ?? j['portion'] ?? j['portions']),
+      name: nameFrom(),
+      brand: brandFrom(),
+      barcode: barcodeFrom(),
+      nutriScore:
+          (j['nutriScore'] ??
+                  j['nutriscore'] ??
+                  j['nutri_score'] ??
+                  p?['nutriScore'])
+              ?.toString()
+              .toUpperCase(),
+      calories: kcalFrom(),
+      protein: numOrNull(j['protein'] ?? p?['protein']),
+      carbs: numOrNull(j['carbs'] ?? p?['carbs']),
+      fat: numOrNull(j['fat'] ?? p?['fat']),
+      quantityGrams: qG,
+      quantityMl: qMl,
+      servings: qServ,
     );
   }
 }
@@ -145,14 +215,17 @@ class DayMeals {
 
   factory DayMeals.fromJson(Map<String, dynamic> j) {
     DateTime parseDate(String? raw) {
-      if (raw == null) return DateTime.now();
-      if (raw.contains('T')) return DateTime.parse(raw).toLocal();
+      if (raw == null) {
+        return DateTime.now();
+      }
+      if (raw.contains('T')) {
+        return DateTime.parse(raw).toLocal();
+      }
       return DateTime.parse('${raw}T00:00:00').toLocal();
     }
 
     final list =
-        (j['entries'] ?? j['items'] ?? j['data'] ?? j['meals'] ?? [])
-            as List<dynamic>;
+        (j['entries'] ?? j['items'] ?? j['data'] ?? j['meals'] ?? []) as List;
 
     final entries = list
         .whereType<Map>()
@@ -184,7 +257,7 @@ class MealsApi {
       InterceptorsWrapper(
         onRequest: (opts, handler) async {
           final token = await AuthStorage.I.readAccessToken();
-          if (token != null) {
+          if (token != null && token.isNotEmpty) {
             opts.headers['Authorization'] = 'Bearer $token';
           }
           opts.headers['Content-Type'] = 'application/json';
@@ -195,117 +268,245 @@ class MealsApi {
     return dio;
   }
 
-  String _yyyyMmDd(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  String _yyyyMmDd(DateTime d) {
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
 
-  /// GET /meals?date=...
-  /// 1ª tentativa: ISO 8601 full; 2ª: YYYY-MM-DD (fallback).
+  num? _n(num? v) {
+    if (v == null) return null;
+    if (v.isNaN) return null;
+    return num.parse(v.toStringAsFixed(2)); // evita problemas com Decimals
+  }
+
+  /* ---------- GET /meals?date=YYYY-MM-DD ---------- */
   Future<DayMeals> getDay(DateTime date) async {
-    final day = DateTime(date.year, date.month, date.day);
-    final iso = day.toUtc().toIso8601String();
-
+    final ymd = _yyyyMmDd(DateTime(date.year, date.month, date.day));
     final dio = _dio();
-    Response res;
+    final res = await dio.get('/meals', queryParameters: {'date': ymd});
 
-    try {
-      res = await dio.get('/meals', queryParameters: {'date': iso});
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 400 || e.response?.statusCode == 404) {
-        res = await dio.get(
-          '/meals',
-          queryParameters: {'date': _yyyyMmDd(day)},
-        );
-      } else {
-        rethrow;
+    final raw = res.data;
+    final data = raw is String ? jsonDecode(raw) : raw;
+
+    // Normalização tolerante
+    List<dynamic> mealsList;
+    if (data is List) {
+      mealsList = data; // [ {meal+items} ]
+    } else if (data is Map && data['meals'] is List) {
+      mealsList = List.from(data['meals']); // { meals: [ {meal+items} ] }
+    } else if (data is Map && data['entries'] is List) {
+      // já vem plano, delegamos
+      final entries = (data['entries'] as List)
+          .whereType<Map>()
+          .map((e) => MealEntry.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      final total = entries.fold<num>(0, (s, e) => s + (e.calories ?? 0));
+      return DayMeals(date: date, entries: entries, totalCalories: total);
+    } else {
+      mealsList = const [];
+    }
+
+    final entries = <MealEntry>[];
+
+    for (final m in mealsList.whereType<Map>()) {
+      final mealType = MealTypeX.fromApi(
+        (m['type'] ?? m['meal'] ?? m['mealType'])?.toString(),
+      );
+      final mealDate = (m['date'] ?? m['at'] ?? ymd).toString();
+
+      final items = (m['items'] is List) ? List.from(m['items']) : const [];
+
+      for (final it in items.whereType<Map>()) {
+        // juntamos campos do meal aos do item para o parser apanhar tudo
+        final merged = <String, dynamic>{
+          ...Map<String, dynamic>.from(it),
+          'meal': mealType.api,
+          'date': mealDate,
+        };
+
+        // alguns backends aninham o produto: { product: {name, brand, kcal...} }
+        if (it['product'] is Map) {
+          final p = Map<String, dynamic>.from(it['product']);
+          merged.addAll({
+            // name
+            if (p['name'] != null) 'name': p['name'],
+            if (p['product_name'] != null) 'product_name': p['product_name'],
+
+            // brand
+            if (p['brand'] != null) 'brand': p['brand'],
+            if (p['brands'] != null) 'brands': p['brands'],
+            if (p['brand_name'] != null) 'brand_name': p['brand_name'],
+
+            // barcode
+            if (p['barcode'] != null) 'barcode': p['barcode'],
+            if (p['code'] != null) 'code': p['code'],
+            if (p['ean'] != null) 'ean': p['ean'],
+
+            // energia
+            if (p['kcal'] != null) 'kcal': p['kcal'],
+            if (p['calories'] != null) 'calories': p['calories'],
+
+            // nutriScore
+            if (p['nutriScore'] != null) 'nutriScore': p['nutriScore'],
+            if (p['nutriscore'] != null) 'nutriscore': p['nutriscore'],
+
+            // macros (se vierem dentro do product)
+            if (p['carbs'] != null) 'carbs': p['carbs'],
+            if (p['carbohydrates'] != null) 'carbohydrates': p['carbohydrates'],
+            if (p['protein'] != null) 'protein': p['protein'],
+            if (p['fat'] != null) 'fat': p['fat'],
+          });
+        }
+
+        entries.add(MealEntry.fromJson(merged));
       }
     }
 
-    final raw = res.data;
-    dynamic data;
-    if (raw is String) {
-      data = jsonDecode(raw);
-    } else {
-      data = raw;
-    }
-
-    late final Map<String, dynamic> normalized;
-    if (data is Map<String, dynamic>) {
-      normalized = data;
-    } else if (data is Map) {
-      normalized = Map<String, dynamic>.from(data);
-    } else if (data is List) {
-      normalized = <String, dynamic>{'date': iso, 'entries': data};
-    } else {
-      normalized = <String, dynamic>{'date': iso, 'entries': const []};
-    }
-
-    return DayMeals.fromJson(normalized);
+    final total = entries.fold<num>(0, (s, e) => s + (e.calories ?? 0));
+    return DayMeals(date: date, entries: entries, totalCalories: total);
   }
 
-  /// POST /meals — contrato: { date, type, items: [...] }
+  /* ---------- POST /meals ---------- */
+  /// Contrato (Nest backend):
+  /// {
+  ///   date: 'YYYY-MM-DD',
+  ///   type: 'LUNCH' | 'DINNER' | 'BREAKFAST' | 'SNACK',
+  ///   items: [{
+  ///     barcode, unit: 'GRAM'|'ML'|'PIECE', quantity (>0),
+  ///     name?, brand?, calories (int), protein?, carbs?, fat?, sugars?, salt?
+  ///   }]
+  /// }
   Future<MealEntry> add({
-    required DateTime at,
+    required DateTime at, // data visível no ecrã
     required MealType meal,
     required String barcode,
-    num? quantityGrams,
-    num? servings,
-    int? calories,
+    String? name,
+    String? brand,
+
+    // conveniências do frontend:
+    num? quantityGrams, // -> unit GRAM
+    num? quantityMl, // -> unit ML
+    num? servings, // -> unit PIECE
+    // caches opcionais:
+    required int calories,
     num? protein,
-    num? carb,
+    num? carbs,
     num? fat,
     num? sugars,
     num? salt,
   }) async {
     final dio = _dio();
 
-    final isoDate = DateTime(
-      at.year,
-      at.month,
-      at.day,
-    ).toUtc().toIso8601String();
+    // --- normalizações ---
+    final ymd = _yyyyMmDd(DateTime(at.year, at.month, at.day));
 
-    final q = quantityGrams ?? servings;
+    // Garante que só um tipo de quantidade é enviado e que é > 0
+    final units = <String, num?>{
+      'GRAM': _n(quantityGrams),
+      'ML': _n(quantityMl),
+      'PIECE': _n(servings),
+    }..removeWhere((_, v) => v == null);
+
+    if (units.isEmpty) {
+      throw ArgumentError(
+        'Deves enviar quantityGrams OU quantityMl OU servings.',
+      );
+    }
+    if (units.length > 1) {
+      throw ArgumentError(
+        'Não envies mais do que um tipo de quantidade (g/ml/porções).',
+      );
+    }
+
+    final unit = units.keys.first;
+    final quantity = units.values.first!;
+    if (quantity <= 0) {
+      throw ArgumentError('A quantidade tem de ser positiva.');
+    }
 
     final payload = <String, dynamic>{
-      'date': isoDate,
+      'date': ymd,
       'type': meal.apiCaps,
       'items': [
         {
           'barcode': barcode,
-          if (q != null) 'quantity': q,
-          if (calories != null) 'calories': calories,
-          if (protein != null) 'protein': protein,
-          if (carb != null) 'carb': carb,
-          if (fat != null) 'fat': fat,
-          if (sugars != null) 'sugars': sugars,
-          if (salt != null) 'salt': salt,
+          'unit': unit,
+          'quantity': quantity,
+          'calories': calories,
+          if (protein != null) 'protein': _n(protein),
+          if (carbs != null) 'carbs': _n(carbs),
+          if (fat != null) 'fat': _n(fat),
+          if (sugars != null) 'sugars': _n(sugars),
+          if (salt != null) 'salt': _n(salt),
         },
       ],
     };
 
-    final res = await dio.post('/meals', data: payload);
+    try {
+      final res = await dio.post('/meals', data: payload);
+      final body = res.data;
+      final map = body is String
+          ? Map<String, dynamic>.from(jsonDecode(body))
+          : Map<String, dynamic>.from(body as Map);
 
-    final body = res.data;
-    final map = body is String
-        ? Map<String, dynamic>.from(jsonDecode(body))
-        : Map<String, dynamic>.from(body as Map);
-    final items = (map['items'] as List?) ?? const [];
+      // Preferimos apanhar o último entry devolvido (quando o serviço retorna o dia)
+      final entries = (map['entries'] as List?) ?? const [];
+      if (entries.isNotEmpty) {
+        return MealEntry.fromJson(Map<String, dynamic>.from(entries.last));
+      }
 
-    if (items.isNotEmpty && items.first is Map) {
-      return MealEntry.fromJson(Map<String, dynamic>.from(items.first));
+      // Fallbacks de respostas alternativas
+      final items = (map['items'] as List?) ?? const [];
+      if (items.isNotEmpty && items.first is Map) {
+        return MealEntry.fromJson(Map<String, dynamic>.from(items.first));
+      }
+
+      // Último recurso (eco do que enviámos)
+      return MealEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        at: at,
+        meal: meal,
+        name: name ?? 'Produto',
+        brand: brand,
+        barcode: barcode,
+        quantityGrams: unit == 'GRAM' ? quantity : null,
+        quantityMl: unit == 'ML' ? quantity : null,
+        servings: unit == 'PIECE' ? quantity : null,
+        calories: calories,
+        protein: protein,
+        carbs: carbs,
+        fat: fat,
+      );
+    } on DioException catch (e) {
+      // Extrai mensagem legível do Nest (message|error|detail)
+      String msg = e.message ?? 'Erro de rede';
+      final data = e.response?.data;
+      if (data is Map) {
+        msg = (data['message'] ?? data['error'] ?? data['detail'] ?? msg)
+            .toString();
+      } else if (data is String && data.isNotEmpty) {
+        msg = data;
+      }
+      throw Exception(
+        'Falha a gravar refeição (${e.response?.statusCode}): $msg',
+      );
     }
-
-    return MealEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      at: DateTime.now(),
-      meal: meal,
-      name: 'Produto',
-      barcode: barcode,
-    );
   }
 
-  /// DELETE /meals/:id
-  Future<void> remove(String id) async {
-    await _dio().delete('/meals/$id');
+  /* ---------- DELETE ---------- */
+  Future<void> deleteMeal(String mealId) async {
+    await _dio().delete('/meals/$mealId');
+  }
+
+  Future<void> deleteMealItem({
+    required String mealId,
+    required String itemId,
+  }) async {
+    await _dio().delete('/meals/$mealId/items/$itemId');
+  }
+
+  Future<void> deleteItemById(String itemId) async {
+    await _dio().delete('/meals/items/$itemId');
   }
 }
