@@ -137,10 +137,56 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             : d.origin;
         _nutri = d.nutriScore;
 
-        _baseLabel = hasServ
-            ? (d.servingSize ?? _baseLabel)
-            : (d.quantity ?? _baseLabel);
-        _kcalBase = (hasServ ? d.kcalServ : d.kcal100g) ?? _kcalBase;
+        // ===== derivar label base + kcal base com precisão =====
+        final rawServ = (d.servingSize ?? '').trim(); // ex.: "41,5 g", "330 ml"
+        final rawQty = (d.quantity ?? '')
+            .trim(); // ex.: "100 g", "100 ml", "500 g"
+        final hasServLabel = rawServ.isNotEmpty;
+
+        // tenta extrair número+unidade da string (g|ml)
+        num? extractQty(String s, String unit) {
+          final m = RegExp(
+            r'(\d+(?:[.,]\d+)?)\s*' + unit + r'\b',
+            caseSensitive: false,
+          ).firstMatch(s.toLowerCase());
+          if (m == null) return null;
+          return num.tryParse(m.group(1)!.replaceAll(',', '.'));
+        }
+
+        final servG = extractQty(rawServ, 'g');
+        final servMl = extractQty(rawServ, 'ml');
+        final qtyG = extractQty(rawQty, 'g');
+        final qtyMl = extractQty(rawQty, 'ml');
+
+        // 1) Se houver info de porção → usar porção
+        if (hasServLabel && (servG != null || servMl != null)) {
+          _baseLabel = rawServ; // ex.: "41,5 g" ou "330 ml"
+          if (d.kcalServ != null && d.kcalServ! > 0) {
+            _kcalBase = d.kcalServ!;
+          } else if (servG != null && d.kcal100g != null) {
+            _kcalBase = ((d.kcal100g! * servG) / 100).round();
+          } else if (servMl != null && d.kcal100g != null) {
+            _kcalBase = ((d.kcal100g! * servMl) / 100).round();
+          } else {
+            _kcalBase = d.kcal100g ?? _kcalBase; // fallback
+          }
+        }
+        // 2) Caso contrário, usar quantity (100 g / 100 ml, ou outro)
+        else if (qtyG != null || qtyMl != null) {
+          _baseLabel = rawQty; // ex.: "100 g", "100 ml", "500 g"
+          if (qtyG != null && d.kcal100g != null) {
+            _kcalBase = ((d.kcal100g! * qtyG) / 100).round();
+          } else if (qtyMl != null && d.kcal100g != null) {
+            _kcalBase = ((d.kcal100g! * qtyMl) / 100).round();
+          } else {
+            _kcalBase = d.kcal100g ?? _kcalBase; // fallback
+          }
+        }
+        // 3) Último recurso: manter anteriores
+        else {
+          _baseLabel = _baseLabel; // mantém o que já vinha de fallback
+          _kcalBase = d.kcal100g ?? _kcalBase;
+        }
 
         _p = (hasServ ? d.proteinServ : d.protein100g) ?? _p;
         _c = (hasServ ? d.carbsServ : d.carbs100g) ?? _c;
@@ -421,26 +467,53 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ? null
                   : () async {
                       try {
-                        // Se a base for 100 g, enviamos gramas; senão, porções
-                        final useGrams =
-                            (_baseLabel.contains('100') &&
-                            _baseLabel.contains('g'));
+                        // Aceita "100 g", "125 g", "330 ml", "1 porção", etc.
+                        final base = _baseLabel.toLowerCase().trim();
+
+                        // Tenta apanhar um número + unidade (g|ml)
+                        final match = RegExp(
+                          r'(\d+(?:[.,]\d+)?)\s*(g|ml)\b',
+                        ).firstMatch(base);
+
+                        num? qGrams;
+                        num? qMl;
+                        num? qServ;
+
+                        if (match != null) {
+                          final n =
+                              num.tryParse(
+                                match.group(1)!.replaceAll(',', '.'),
+                              ) ??
+                              100;
+                          final unitStr = match.group(2); // "g" | "ml"
+                          if (unitStr == 'g') {
+                            qGrams = _portions * n;
+                          } else {
+                            qMl = _portions * n;
+                          }
+                        } else {
+                          // Não há número + (g|ml) → tratamos como "porção/unidade"
+                          qServ = _portions;
+                        }
+
                         await MealsApi.I.add(
                           at: widget.date ?? DateTime.now(),
                           meal: _selectedMeal,
                           barcode: widget.barcode!,
-                          quantityGrams: useGrams ? (_portions * 100) : null,
-                          servings: useGrams ? null : _portions,
-                          calories: kcal,
-                          protein: protein,
-                          carb: carbs,
-                          fat: fat,
-                          sugars: sugar,
-                          salt: salt,
+                          name: _name,
+                          brand: _brand,
+                          quantityGrams: qGrams,
+                          quantityMl: qMl,
+                          servings: qServ,
+                          calories: (_kcalBase * _portions).round(),
+                          protein: _p * _portions,
+                          carbs: _c * _portions,
+                          fat: _f * _portions,
+                          sugars: _sugar * _portions,
+                          salt: _salt * _portions,
                         );
-                        if (context.mounted) {
-                          context.pop(true); // devolve sucesso a quem chamou
-                        }
+
+                        if (context.mounted) context.pop(true);
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(
