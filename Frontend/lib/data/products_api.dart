@@ -99,6 +99,7 @@ class ProductDetail {
   final double? fiberServ;
   final double? saltServ;
   final double? sodiumServ;
+  final bool? isFavorite;
 
   ProductDetail({
     required this.barcode,
@@ -127,6 +128,7 @@ class ProductDetail {
     this.fiberServ,
     this.saltServ,
     this.sodiumServ,
+    this.isFavorite,
   });
 
   factory ProductDetail.fromJson(Map<String, dynamic> j) => ProductDetail(
