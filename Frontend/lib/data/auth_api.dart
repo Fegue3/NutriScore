@@ -33,18 +33,29 @@ class AuthApi {
     }
   }
 
-  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})>
+  signIn({required String email, required String password}) async {
     try {
-      final res = await _dio.post('/auth/login', data: {'email': email, 'password': password});
+      final res = await _dio.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
       final data = res.data as Map<String, dynamic>;
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
-      final access = (tokens['accessToken'] as String?) ?? (tokens['access_token'] as String?) ?? '';
-      final refresh = (tokens['refreshToken'] as String?) ?? (tokens['refresh_token'] as String?) ?? '';
+      final access =
+          (tokens['accessToken'] as String?) ??
+          (tokens['access_token'] as String?) ??
+          '';
+      final refresh =
+          (tokens['refreshToken'] as String?) ??
+          (tokens['refresh_token'] as String?) ??
+          '';
       if (access.isEmpty) throw 'Access token não recebido';
-      return (accessToken: access, refreshToken: refresh, user: (data['user'] ?? {}) as Map<String, dynamic>);
+      return (
+        accessToken: access,
+        refreshToken: refresh,
+        user: (data['user'] ?? {}) as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       final msg = e.response?.data is Map
           ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
@@ -56,24 +67,38 @@ class AuthApi {
     }
   }
 
-  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})> signUp({
+  Future<({String accessToken, String refreshToken, Map<String, dynamic> user})>
+  signUp({
     required String email,
     required String password,
     String? name,
   }) async {
     try {
-      final res = await _dio.post('/auth/register', data: {
-        'email': email,
-        'password': password,
-        if (name != null && name.isNotEmpty) 'name': name,
-      });
+      final res = await _dio.post(
+        '/auth/register',
+        data: {
+          'email': email,
+          'password': password,
+          if (name != null && name.isNotEmpty) 'name': name,
+        },
+      );
 
       final data = res.data as Map<String, dynamic>;
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
-      final access = (tokens['accessToken'] as String?) ?? (tokens['access_token'] as String?) ?? '';
-      final refresh = (tokens['refreshToken'] as String?) ?? (tokens['refresh_token'] as String?) ?? '';
+      final access =
+          (tokens['accessToken'] as String?) ??
+          (tokens['access_token'] as String?) ??
+          '';
+      final refresh =
+          (tokens['refreshToken'] as String?) ??
+          (tokens['refresh_token'] as String?) ??
+          '';
       if (access.isEmpty) throw 'Access token não recebido';
-      return (accessToken: access, refreshToken: refresh, user: (data['user'] ?? {}) as Map<String, dynamic>);
+      return (
+        accessToken: access,
+        refreshToken: refresh,
+        user: (data['user'] ?? {}) as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       final msg = e.response?.data is Map
           ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
@@ -86,14 +111,27 @@ class AuthApi {
   }
 
   /// Refresh do access/refresh token.
-  Future<({String accessToken, String refreshToken})> refresh({required String refreshToken}) async {
+  Future<({String accessToken, String refreshToken})> refresh({
+    required String refreshToken,
+  }) async {
     try {
-      final res = await _dio.post('/auth/refresh', data: {'refreshToken': refreshToken});
+      final res = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+      );
       final data = res.data as Map<String, dynamic>;
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
-      final access = (tokens['accessToken'] as String?) ?? (tokens['access_token'] as String?) ?? '';
-      final newRefresh = (tokens['refreshToken'] as String?) ?? (tokens['refresh_token'] as String?) ?? '';
-      if (access.isEmpty || newRefresh.isEmpty) throw 'Tokens inválidos no refresh';
+      final access =
+          (tokens['accessToken'] as String?) ??
+          (tokens['access_token'] as String?) ??
+          '';
+      final newRefresh =
+          (tokens['refreshToken'] as String?) ??
+          (tokens['refresh_token'] as String?) ??
+          '';
+      if (access.isEmpty || newRefresh.isEmpty) {
+        throw 'Tokens inválidos no refresh';
+      }
       return (accessToken: access, refreshToken: newRefresh);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
@@ -114,7 +152,9 @@ class AuthApi {
       '/auth/me',
       options: Options(headers: {'Authorization': 'Bearer $token'}),
     );
-    if (res.statusCode != 204 && res.statusCode != 200 && res.statusCode != 404) {
+    if (res.statusCode != 204 &&
+        res.statusCode != 200 &&
+        res.statusCode != 404) {
       throw 'Falha ao apagar conta (HTTP ${res.statusCode})';
     }
   }
@@ -164,7 +204,11 @@ class AuthApi {
       }
     } on DioException catch (e) {
       final msg = e.response?.data is Map
-          ? ((e.response!.data['error'] ?? e.response!.data['message'] ?? e.message) as Object?).toString()
+          ? ((e.response!.data['error'] ??
+                        e.response!.data['message'] ??
+                        e.message)
+                    as Object?)
+                .toString()
           : (e.message ?? 'Erro de rede');
       final code = e.response?.statusCode;
       throw 'Erro ao guardar metas: $msg (code=$code)';
@@ -177,7 +221,7 @@ class AuthApi {
       final res = await _dio.get('/api/me/flags');
       final v = res.data?['flags']?['onboardingCompleted'];
       return v == true;
-    } on DioException catch (e) {
+    } on DioException {
       // Propaga o erro (ex.: 401) para o repo decidir fazer refresh ou não
       rethrow;
     }
@@ -185,7 +229,10 @@ class AuthApi {
 
   Future<void> setOnboardingCompleted(bool value) async {
     try {
-      final res = await _dio.patch('/api/me/flags', data: {'onboardingCompleted': value});
+      final res = await _dio.patch(
+        '/api/me/flags',
+        data: {'onboardingCompleted': value},
+      );
       if (res.statusCode != 200) throw 'HTTP ${res.statusCode}';
     } on DioException catch (e) {
       final status = e.response?.statusCode;
