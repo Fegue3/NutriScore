@@ -81,9 +81,8 @@ GoRouter buildAppRouter(AuthRepository repo) {
           final MealType? initialMeal = MealTypeX.fromLabelPt(mealLabel);
 
           final dateStr = state.uri.queryParameters['date'];
-          final selectedDate = dateStr != null
-              ? DateTime.tryParse(dateStr)
-              : null;
+          final selectedDate =
+              dateStr != null ? DateTime.tryParse(dateStr) : null;
 
           return AddFoodScreen(
             initialMeal: initialMeal,
@@ -92,12 +91,25 @@ GoRouter buildAppRouter(AuthRepository repo) {
         },
       ),
 
-      // Detalhe do produto (tolerante a tipos vindos em 'extra')
+      // Detalhe do produto (suporta extra e query; inclui readOnly e freezeFromEntry)
       GoRoute(
         name: 'productDetail',
         path: '/product-detail',
         builder: (_, state) {
-          final m = (state.extra as Map?) ?? {};
+          final m = (state.extra as Map?) ?? const {};
+
+          bool qBool(String? v) => v == '1' || (v?.toLowerCase() == 'true');
+
+
+          final readOnly =
+              (m['readOnly'] == true) ||
+              qBool(state.uri.queryParameters['readOnly']);
+
+          // opcionalmente aceitar freeze também por query
+          final freezeFromEntry =
+              (m['freezeFromEntry'] == true) ||
+              qBool(state.uri.queryParameters['freezeFromEntry']);
+
           DateTime? parseDate(dynamic v) {
             if (v is DateTime) return v;
             if (v is String) return DateTime.tryParse(v);
@@ -123,7 +135,8 @@ GoRouter buildAppRouter(AuthRepository repo) {
             name: m['name']?.toString() ?? 'Produto',
             brand: m['brand']?.toString(),
             origin: m['origin']?.toString(),
-            baseQuantityLabel: m['baseQuantityLabel']?.toString() ?? '100 g',
+            baseQuantityLabel:
+                m['baseQuantityLabel']?.toString() ?? '100 g',
             kcalPerBase: (n(m['kcalPerBase']) ?? 0).toInt(),
             proteinGPerBase: (n(m['proteinGPerBase']) ?? 0).toDouble(),
             carbsGPerBase: (n(m['carbsGPerBase']) ?? 0).toDouble(),
@@ -136,6 +149,8 @@ GoRouter buildAppRouter(AuthRepository repo) {
             nutriScore: m['nutriScore']?.toString(),
             initialMeal: initialMeal,
             date: date,
+            readOnly: readOnly,
+            freezeFromEntry: freezeFromEntry,
           );
         },
       ),
@@ -146,12 +161,17 @@ GoRouter buildAppRouter(AuthRepository repo) {
         routes: [
           GoRoute(
             path: '/dashboard',
-            pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: HomeScreen()),
           ),
           GoRoute(
             path: '/diary',
-            pageBuilder: (_, __) =>
-                const NoTransitionPage(child: NutritionScreen()),
+            pageBuilder: (_, state) => NoTransitionPage(
+              key: state.pageKey, // força recriação da page quando a URL muda
+              child: NutritionScreen(
+                key: ValueKey(state.uri.toString()), // reforça rebuild por query
+              ),
+            ),
           ),
           GoRoute(
             path: '/settings',
