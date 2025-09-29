@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/meals_api.dart';
 import '../../data/products_api.dart'; // cliente dos endpoints /api/products/*
 
-/// NutriScore — ProductDetailScreen (v9.2 estável)
+/// NutriScore — ProductDetailScreen (v9.3)
 /// - Usa ProductsApi.I.getByBarcode(barcode)
 /// - Usa ProductsApi.I.toggleFavorite(barcode)
-/// - Fallback: mostra dados passados no construtor enquanto faz fetch
+/// - Grava refeição via MealsApi.I.add(...)
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({
     super.key,
@@ -37,6 +38,7 @@ class ProductDetailScreen extends StatefulWidget {
     // Extra
     this.nutriScore,
     this.initialMeal,
+    this.date,
   });
 
   final String? barcode;
@@ -57,14 +59,15 @@ class ProductDetailScreen extends StatefulWidget {
   final double? sodiumGPerBase;
 
   final String? nutriScore;
-  final String? initialMeal;
+  final MealType? initialMeal;
+  final DateTime? date;
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  late String _selectedMeal;
+  late MealType _selectedMeal;
 
   final TextEditingController _portionCtrl = TextEditingController(text: "1");
   double _portions = 1;
@@ -80,11 +83,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   String? _nutri;
 
   int _kcalBase = 0;
-  double _p = 0, _c = 0, _f = 0, _salt = 0, _sugar = 0, _sat = 0, _fiber = 0, _sodium = 0;
+  double _p = 0,
+      _c = 0,
+      _f = 0,
+      _salt = 0,
+      _sugar = 0,
+      _sat = 0,
+      _fiber = 0,
+      _sodium = 0;
+
   @override
   void initState() {
     super.initState();
-    _selectedMeal = widget.initialMeal ?? "Almoço";
+    _selectedMeal = widget.initialMeal ?? MealType.breakfast;
     _hydrateWithFallback();
     _maybeFetch();
   }
@@ -121,10 +132,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       setState(() {
         _name = d.name;
         _brand = d.brand;
-        _origin = (d.origin ?? '').split(',').first.trim().isEmpty ? null : d.origin;
+        _origin = (d.origin ?? '').split(',').first.trim().isEmpty
+            ? null
+            : d.origin;
         _nutri = d.nutriScore;
 
-        _baseLabel = hasServ ? (d.servingSize ?? _baseLabel) : (d.quantity ?? _baseLabel);
+        _baseLabel = hasServ
+            ? (d.servingSize ?? _baseLabel)
+            : (d.quantity ?? _baseLabel);
         _kcalBase = (hasServ ? d.kcalServ : d.kcal100g) ?? _kcalBase;
 
         _p = (hasServ ? d.proteinServ : d.protein100g) ?? _p;
@@ -138,9 +153,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -228,7 +243,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             onPressed: (widget.barcode == null)
                                 ? null
                                 : () async {
-                                    final messenger = ScaffoldMessenger.of(context);
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
                                     try {
                                       final fav = await ProductsApi.I
                                           .toggleFavorite(widget.barcode!);
@@ -280,7 +297,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerHighest.withValues(alpha: .35),
-
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.all(16),
@@ -401,8 +417,38 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           child: SizedBox(
             height: 52,
             child: FilledButton(
-              onPressed: () => context.pop(),
-              child: Text("Adicionar ao $_selectedMeal"),
+              onPressed: (widget.barcode == null)
+                  ? null
+                  : () async {
+                      try {
+                        // Se a base for 100 g, enviamos gramas; senão, porções
+                        final useGrams =
+                            (_baseLabel.contains('100') &&
+                            _baseLabel.contains('g'));
+                        await MealsApi.I.add(
+                          at: widget.date ?? DateTime.now(),
+                          meal: _selectedMeal,
+                          barcode: widget.barcode!,
+                          quantityGrams: useGrams ? (_portions * 100) : null,
+                          servings: useGrams ? null : _portions,
+                          calories: kcal,
+                          protein: protein,
+                          carb: carbs,
+                          fat: fat,
+                          sugars: sugar,
+                          salt: salt,
+                        );
+                        if (context.mounted) {
+                          context.pop(true); // devolve sucesso a quem chamou
+                        }
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
+                    },
+              child: Text("Adicionar ao ${_selectedMeal.labelPt}"),
             ),
           ),
         ),
@@ -548,16 +594,9 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _MealDropdown extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
+  final MealType value;
+  final ValueChanged<MealType> onChanged;
   const _MealDropdown({required this.value, required this.onChanged});
-
-  static const _meals = <String>[
-    "Pequeno-almoço",
-    "Almoço",
-    "Lanche",
-    "Jantar",
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -572,27 +611,23 @@ class _MealDropdown extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
+        child: DropdownButton<MealType>(
           value: value,
           isExpanded: true,
           icon: const Icon(Icons.expand_more_rounded),
           borderRadius: BorderRadius.circular(12),
-          items: _meals
-              .map(
-                (m) => DropdownMenuItem<String>(
-                  value: m,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text(
-                      m,
-                      style: tt.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+          items: MealType.values.map((m) {
+            return DropdownMenuItem<MealType>(
+              value: m,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text(
+                  m.labelPt,
+                  style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
-              )
-              .toList(),
+              ),
+            );
+          }).toList(),
           onChanged: (v) {
             if (v != null) onChanged(v);
           },
@@ -713,8 +748,9 @@ class _ExpandableInfoState extends State<_ExpandableInfo> {
                       style: tt.bodyMedium?.copyWith(color: cs.onSurface),
                     ),
             ),
-            crossFadeState:
-                _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState: _open
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 160),
           ),
         ],
@@ -759,9 +795,11 @@ class _NutritionInfo extends StatelessWidget {
       _NutriRow("Energia", "$kcal kcal"),
       _NutriRow("Proteína", "${protein.toStringAsFixed(1)} g"),
       _NutriRow("Hidratos de carbono", "${carbs.toStringAsFixed(1)} g"),
-      if (sugars != null) _NutriRow("Açúcares", "${sugars!.toStringAsFixed(1)} g"),
+      if (sugars != null)
+        _NutriRow("Açúcares", "${sugars!.toStringAsFixed(1)} g"),
       _NutriRow("Gordura", "${fat.toStringAsFixed(1)} g"),
-      if (satFat != null) _NutriRow("Gordura saturada", "${satFat!.toStringAsFixed(1)} g"),
+      if (satFat != null)
+        _NutriRow("Gordura saturada", "${satFat!.toStringAsFixed(1)} g"),
       if (fiber != null) _NutriRow("Fibra", "${fiber!.toStringAsFixed(1)} g"),
       if (salt != null) _NutriRow("Sal", "${salt!.toStringAsFixed(2)} g"),
       if (sodium != null) _NutriRow("Sódio", "${sodium!.toStringAsFixed(2)} g"),

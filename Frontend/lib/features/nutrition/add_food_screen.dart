@@ -3,12 +3,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/meals_api.dart';
 import '../../data/products_api.dart'; // ProductsApi, ProductSummary, ProductHistoryItem
 
 /// NutriScore — AddFoodScreen (v9.2 - histórico real via API, sem imagens nas listas)
 class AddFoodScreen extends StatefulWidget {
-  final String? initialMeal; // "Pequeno-almoço", "Almoço", "Lanche", "Jantar"
-  const AddFoodScreen({super.key, this.initialMeal});
+  final MealType? initialMeal; // "Pequeno-almoço", "Almoço", "Lanche", "Jantar"
+  final DateTime? selectedDate;
+  const AddFoodScreen({super.key, this.initialMeal, this.selectedDate});
 
   @override
   State<AddFoodScreen> createState() => _AddFoodScreenState();
@@ -16,13 +18,7 @@ class AddFoodScreen extends StatefulWidget {
 
 class _AddFoodScreenState extends State<AddFoodScreen> {
   final _searchCtrl = TextEditingController();
-  static const _meals = <String>[
-    "Pequeno-almoço",
-    "Almoço",
-    "Lanche",
-    "Jantar",
-  ];
-  late String _selectedMeal;
+  late MealType _selectedMeal;
 
   // Alterna título Histórico/Pesquisa
   bool _showPesquisa = false;
@@ -38,10 +34,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedMeal = _meals.contains(widget.initialMeal)
-        ? widget.initialMeal!
-        : "Lanche";
-
+    _selectedMeal = widget.initialMeal ?? MealType.breakfast;
     _fetchHistory(); // carrega logo o histórico
 
     // Sugestões rápidas enquanto escreve
@@ -113,6 +106,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   }
 
   Future<void> _openDetailFromSummary(ProductSummary it) async {
+    final day = widget.selectedDate ?? DateTime.now();
     await context.pushNamed(
       'productDetail',
       extra: {
@@ -122,7 +116,8 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
         "baseQuantityLabel": "100 g",
         "kcalPerBase": it.energyKcal100g ?? 0,
         "nutriScore": it.nutriScore,
-        "initialMeal": _selectedMeal,
+        "initialMeal": _selectedMeal.labelPt,
+        "date": day,
       },
     );
     if (!mounted) return;
@@ -130,9 +125,13 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   }
 
   Future<void> _openDetailFromHistory(ProductHistoryItem h) async {
+    final day = widget.selectedDate ?? DateTime.now();
     final barcode = h.barcode ?? h.product?.barcode;
     if (barcode != null && barcode.isNotEmpty) {
-      await context.pushNamed('productDetail', extra: {"barcode": barcode, "initialMeal": _selectedMeal});
+      await context.pushNamed(
+        'productDetail',
+        extra: {"barcode": barcode, "initialMeal": _selectedMeal.labelPt, "date": day,},
+      );
     } else {
       final p = h.product;
       await context.pushNamed(
@@ -146,7 +145,8 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
           "proteinGPerBase": h.proteins,
           "carbsGPerBase": h.carbs,
           "fatGPerBase": h.fat,
-          "initialMeal": _selectedMeal,
+          "initialMeal": _selectedMeal.labelPt,
+          "date": day,
         },
       );
     }
@@ -322,8 +322,8 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
 /* ============================ WIDGETS HERO ============================ */
 
 class _MealComboChipCentered extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
+  final MealType value;
+  final ValueChanged<MealType> onChanged;
   final Color chipColor;
   final Color textColor;
   const _MealComboChipCentered({
@@ -332,13 +332,6 @@ class _MealComboChipCentered extends StatelessWidget {
     required this.chipColor,
     required this.textColor,
   });
-
-  static const _meals = <String>[
-    "Pequeno-almoço",
-    "Almoço",
-    "Lanche",
-    "Jantar",
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -351,64 +344,56 @@ class _MealComboChipCentered extends StatelessWidget {
         color: Colors.transparent,
         shape: StadiumBorder(),
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: value,
-            isExpanded: true,
-            icon: const SizedBox.shrink(),
-            alignment: Alignment.center,
-            dropdownColor: chipColor,
-            borderRadius: BorderRadius.circular(12),
-            selectedItemBuilder: (_) => _meals
-                .map(
-                  (m) => Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          m,
-                          style: tt.titleMedium?.copyWith(
-                            fontSize: 20,
-                            color: textColor,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Icon(Icons.expand_more_rounded, color: textColor),
-                      ],
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<MealType>(
+          value: value,
+          isExpanded: true,
+          icon: const SizedBox.shrink(),
+          alignment: Alignment.center,
+          dropdownColor: chipColor,
+          borderRadius: BorderRadius.circular(12),
+
+          selectedItemBuilder: (_) => MealType.values.map((m) {
+            return Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    m.labelPt,
+                    style: tt.titleMedium?.copyWith(
+                      fontSize: 20,
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                )
-                .toList(),
-            items: _meals
-                .map(
-                  (m) => DropdownMenuItem<String>(
-                    value: m,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Text(
-                          m,
-                          style: tt.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: textColor,
-                          ),
-                        ),
-                      ),
+                  const SizedBox(width: 10),
+                  Icon(Icons.expand_more_rounded, color: textColor),
+                ],
+              ),
+            );
+          }).toList(),
+
+          items: MealType.values.map((m) {
+            return DropdownMenuItem<MealType>(
+              value: m,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Text(
+                    m.labelPt,
+                    style: tt.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
                     ),
                   ),
-                )
-                .toList(),
-            onChanged: (v) {
-              if (v != null) onChanged(v);
-            },
-          ),
+                ),
+              ),
+            );
+          }).toList(),
+
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
         ),
       ),
     );

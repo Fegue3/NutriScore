@@ -1,8 +1,9 @@
+// lib/features/nutrition/nutrition_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-// ⬇️ usa o CalorieApi que lê o token do AuthStorage automaticamente
-import '../../data/calorie_api.dart'; // <-- ajusta o caminho conforme o teu projeto
+import '../../data/calorie_api.dart';
+import '../../data/meals_api.dart';
 
 class NutritionScreen extends StatefulWidget {
   const NutritionScreen({super.key});
@@ -11,30 +12,51 @@ class NutritionScreen extends StatefulWidget {
 }
 
 class _NutritionScreenState extends State<NutritionScreen> {
-  // ===== Estado de navegação por dia =====
+  // ===== Navegação por dia =====
   int _dayOffset = 0; // 0=Hoje, -1=Ontem, 1=Amanhã…
-  int _slideDir = 0; // -1 esquerda→direita, +1 direita→esquerda
+  int _slideDir = 0;
 
-  // ===== Calorias (local) =====
-  final int _fallbackDailyGoal = 2200; // Meta fallback (até vir do backend)
-  final Map<String, int> _mealCalories = {
-    "Pequeno-almoço": 0,
-    "Almoço": 0,
-    "Lanche": 0,
-    "Jantar": 0,
-  };
-
-  // ===== Calorias (vindas do backend) =====
+  // ===== Estado calorias (resumo topo) =====
+  final int _fallbackDailyGoal = 2200;
   int? _dailyGoalFromApi;
   int? _consumedFromApi;
+
+  int get _goal => _dailyGoalFromApi ?? _fallbackDailyGoal;
+  int get _consumed {
+    // Preferimos o valor do CalorieApi; se não vier, somamos as entradas
+    final api = _consumedFromApi;
+    if (api != null) return api;
+    int sum = 0;
+    for (final e in _entries) {
+      final c = e.calories;
+      if (c != null) sum += c.round();
+    }
+    return sum;
+  }
+
+  // ===== Estado das refeições (MealsApi) =====
   bool _loading = false;
   String? _error;
 
-  int get _localConsumed =>
-      _mealCalories.values.fold<int>(0, (sum, v) => sum + v);
+  List<MealEntry> _entries = const [];
 
-  int get _goal => _dailyGoalFromApi ?? _fallbackDailyGoal;
-  int get _consumed => _consumedFromApi ?? _localConsumed;
+  // Agrupado por tipo:
+  List<MealEntry> get _brk =>
+      _entries.where((e) => e.meal == MealType.breakfast).toList();
+  List<MealEntry> get _lun =>
+      _entries.where((e) => e.meal == MealType.lunch).toList();
+  List<MealEntry> get _snk =>
+      _entries.where((e) => e.meal == MealType.snack).toList();
+  List<MealEntry> get _din =>
+      _entries.where((e) => e.meal == MealType.dinner).toList();
+
+  int _sumKcal(Iterable<MealEntry> xs) {
+    int s = 0;
+    for (final e in xs) {
+      if (e.calories != null) s += e.calories!.round();
+    }
+    return s;
+  }
 
   @override
   void initState() {
@@ -47,21 +69,27 @@ class _NutritionScreenState extends State<NutritionScreen> {
       _loading = true;
       _error = null;
     });
+
+    final date = DateTime.now().add(Duration(days: offset));
     try {
-      final date = DateTime.now().add(Duration(days: offset));
-      final result = await CalorieApi.I.getDaily(
+      // Resumo calorias (objetivo/consumidas)
+      final daily = await CalorieApi.I.getDaily(
         date: offset == 0 ? null : date,
       );
+      // Entradas do diário (refeições)
+      final dayMeals = await MealsApi.I.getDay(date);
+
       if (!mounted) return;
       setState(() {
-        _dailyGoalFromApi = result.targetCalories;
-        _consumedFromApi = result.consumedCalories;
+        _dailyGoalFromApi = daily.targetCalories;
+        _consumedFromApi = daily.consumedCalories;
+        _entries = dayMeals.entries;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Falha ao carregar calorias: $e';
+        _error = 'Falha ao carregar o dia: $e';
         _loading = false;
       });
     }
@@ -84,11 +112,35 @@ class _NutritionScreenState extends State<NutritionScreen> {
     _fetchForOffset(_dayOffset);
   }
 
-  // Disponível quando integrares o fluxo “Adicionar alimento”
-  // ignore: unused_element
-  void _setMealCalories(String meal, int kcal) {
-    if (!_mealCalories.containsKey(meal)) return;
-    setState(() => _mealCalories[meal] = kcal.clamp(0, 100000));
+  Future<void> _openAddFor(String mealTitle) async {
+    final meal = Uri.encodeComponent(mealTitle);
+
+    // dia atualmente selecionado no ecrã (offset aplicado)
+    final selectedDate = DateTime.now().add(Duration(days: _dayOffset));
+
+    // usa uma rota nomeada OU mantém a atual, mas passa a data em `extra`
+    await context.push(
+      '/add-food?meal=$meal',
+      extra: {
+        'selectedDate': selectedDate,
+      },
+    );
+
+    if (!mounted) return;
+    _fetchForOffset(_dayOffset); // refresh ao voltar
+  }
+
+  Future<void> _removeEntry(MealEntry e) async {
+    try {
+      await MealsApi.I.remove(e.id);
+      if (!mounted) return;
+      setState(() => _entries = _entries.where((x) => x.id != e.id).toList());
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(err.toString())));
+    }
   }
 
   @override
@@ -129,16 +181,14 @@ class _NutritionScreenState extends State<NutritionScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.push('/add-food');
-        },
+        onPressed: () => _openAddFor("Pequeno-almoço"),
         backgroundColor: cs.primary,
         foregroundColor: cs.onPrimary,
         child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
-          // ===== HERO VERDE (setas + data + resumo de calorias) =====
+          // ===== HERO VERDE =====
           Container(
             color: cs.primary,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
@@ -217,7 +267,6 @@ class _NutritionScreenState extends State<NutritionScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // --- Resumo de calorias (compacto, sem ícones) ---
                   _CalorieSummaryConnectedCompact(
                     goal: _goal,
                     consumed: _consumed,
@@ -257,15 +306,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 );
               },
               child: _DayContent(
-                key: ValueKey(_dayOffset),
-                goal: _goal,
-                consumed: _consumed,
-                mealCalories: _mealCalories,
-                onTapAddFood: (mealTitle) {
-                  final meal = Uri.encodeComponent(mealTitle);
-                  context.push('/add-food?meal=$meal');
-                },
-                // onCaloriesUpdated: _setMealCalories,
+                key: ValueKey('$_dayOffset-${_entries.length}'),
+                brk: _brk,
+                lun: _lun,
+                snk: _snk,
+                din: _din,
+                kcalBrk: _sumKcal(_brk),
+                kcalLun: _sumKcal(_lun),
+                kcalSnk: _sumKcal(_snk),
+                kcalDin: _sumKcal(_din),
+                onTapAddFood: _openAddFor,
+                onRemove: _removeEntry,
               ),
             ),
           ),
@@ -275,7 +326,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 }
 
-// ---------- Auxiliares ----------
+/* ============================ AUXILIARES ============================ */
 
 class _ArrowBtn extends StatelessWidget {
   final IconData icon;
@@ -297,18 +348,26 @@ class _ArrowBtn extends StatelessWidget {
   }
 }
 
+/* ============================ DIA ============================ */
+
 class _DayContent extends StatelessWidget {
-  final int goal;
-  final int consumed;
-  final Map<String, int> mealCalories;
-  final void Function(String mealTitle)? onTapAddFood;
+  final List<MealEntry> brk, lun, snk, din;
+  final int kcalBrk, kcalLun, kcalSnk, kcalDin;
+  final void Function(String mealTitle) onTapAddFood;
+  final void Function(MealEntry e) onRemove;
 
   const _DayContent({
     super.key,
-    required this.goal,
-    required this.consumed,
-    required this.mealCalories,
-    this.onTapAddFood,
+    required this.brk,
+    required this.lun,
+    required this.snk,
+    required this.din,
+    required this.kcalBrk,
+    required this.kcalLun,
+    required this.kcalSnk,
+    required this.kcalDin,
+    required this.onTapAddFood,
+    required this.onRemove,
   });
 
   @override
@@ -324,30 +383,34 @@ class _DayContent extends StatelessWidget {
         children: [
           _MealSection(
             title: "Pequeno-almoço",
-            calories: mealCalories["Pequeno-almoço"] ?? 0,
-            items: const [],
-            onAddTap: () => onTapAddFood?.call("Pequeno-almoço"),
+            calories: kcalBrk,
+            items: brk,
+            onAddTap: () => onTapAddFood("Pequeno-almoço"),
+            onRemove: onRemove,
           ),
           const SizedBox(height: 16),
           _MealSection(
             title: "Almoço",
-            calories: mealCalories["Almoço"] ?? 0,
-            items: const [],
-            onAddTap: () => onTapAddFood?.call("Almoço"),
+            calories: kcalLun,
+            items: lun,
+            onAddTap: () => onTapAddFood("Almoço"),
+            onRemove: onRemove,
           ),
           const SizedBox(height: 16),
           _MealSection(
             title: "Lanche",
-            calories: mealCalories["Lanche"] ?? 0,
-            items: const [],
-            onAddTap: () => onTapAddFood?.call("Lanche"),
+            calories: kcalSnk,
+            items: snk,
+            onAddTap: () => onTapAddFood("Lanche"),
+            onRemove: onRemove,
           ),
           const SizedBox(height: 16),
           _MealSection(
             title: "Jantar",
-            calories: mealCalories["Jantar"] ?? 0,
-            items: const [],
-            onAddTap: () => onTapAddFood?.call("Jantar"),
+            calories: kcalDin,
+            items: din,
+            onAddTap: () => onTapAddFood("Jantar"),
+            onRemove: onRemove,
           ),
           const SizedBox(height: 16),
           const _WaterCard(),
@@ -374,7 +437,8 @@ class _BounceScrollBehavior extends ScrollBehavior {
   }
 }
 
-/// --------- CALORIE SUMMARY (conectado, compacto e sem ícones) ---------
+/* ============================ CALORIE SUMMARY ============================ */
+
 class _CalorieSummaryConnectedCompact extends StatelessWidget {
   final int goal;
   final int consumed;
@@ -394,7 +458,6 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
     final onP = cs.onPrimary;
     final dividerColor = onP.withValues(alpha: .22);
 
-    // Segmento compacto (sem ícone)
     Widget seg({
       required String label,
       required String value,
@@ -406,7 +469,6 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // rótulo em "chip" pequeno
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -425,7 +487,6 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              // valor: adapta escala para caber no terço disponível
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -446,10 +507,9 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: SizedBox(
-        height: 70, // mais baixo para garantir espaço
+        height: 70,
         child: Stack(
           children: [
-            // Fundo
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -464,7 +524,6 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
                 ),
               ),
             ),
-            // Conteúdo (3 partes iguais)
             Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -477,7 +536,6 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
                 ),
               ],
             ),
-            // Divisórias desenhadas (não ocupam largura)
             Positioned.fill(
               child: CustomPaint(
                 painter: _VerticalDividersPainter(
@@ -495,7 +553,6 @@ class _CalorieSummaryConnectedCompact extends StatelessWidget {
   }
 }
 
-/// pinta N divisórias verticais igualmente espaçadas, sem ocupar largura
 class _VerticalDividersPainter extends CustomPainter {
   final Color color;
   final int count;
@@ -517,7 +574,7 @@ class _VerticalDividersPainter extends CustomPainter {
 
     for (var i = 1; i <= count; i++) {
       final x = size.width * i / (count + 1);
-      final alignedX = x.floorToDouble() + 0.5; // alinhado ao pixel
+      final alignedX = x.floorToDouble() + 0.5;
       canvas.drawLine(
         Offset(alignedX, topPad),
         Offset(alignedX, size.height - bottomPad),
@@ -534,18 +591,21 @@ class _VerticalDividersPainter extends CustomPainter {
       old.bottomPad != bottomPad;
 }
 
-/// --------- MEAL CARD ---------
+/* ============================ MEAL CARD ============================ */
+
 class _MealSection extends StatefulWidget {
   final String title;
   final int calories;
-  final List<String> items;
+  final List<MealEntry> items;
   final VoidCallback? onAddTap;
+  final void Function(MealEntry e)? onRemove;
 
   const _MealSection({
     required this.title,
     required this.calories,
     required this.items,
     this.onAddTap,
+    this.onRemove,
   });
 
   @override
@@ -577,7 +637,7 @@ class _MealSectionState extends State<_MealSection> {
         borderRadius: BorderRadius.circular(16),
         child: Column(
           children: [
-            // HEADER verde
+            // HEADER
             Material(
               color: cs.primary,
               child: InkWell(
@@ -631,7 +691,7 @@ class _MealSectionState extends State<_MealSection> {
               ),
             ),
 
-            // BODY branco (se expandido)
+            // BODY
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 180),
               crossFadeState: _expanded
@@ -641,34 +701,26 @@ class _MealSectionState extends State<_MealSection> {
                 width: double.infinity,
                 color: Colors.white,
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: _ItemsList(
+                child: _MealItemsList(
                   items: widget.items,
-                  centerWhenEmpty: true,
-                  onPrimaryContext: false,
+                  onRemove: widget.onRemove,
                 ),
               ),
               secondChild: const SizedBox.shrink(),
             ),
 
-            // Divisor sutil → desaparece quando expandes
+            // divisor
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               height: 1,
               color: Colors.black.withValues(alpha: _expanded ? 0.0 : 0.06),
             ),
 
-            // FOOTER ligado (CTA dentro do mesmo card)
+            // FOOTER (Adicionar alimento)
             Material(
               color: Colors.white,
               child: InkWell(
-                onTap: () {
-                  if (widget.onAddTap != null) {
-                    widget.onAddTap!();
-                  } else {
-                    final meal = Uri.encodeComponent(widget.title);
-                    context.push('/add-food?meal=$meal');
-                  }
-                },
+                onTap: widget.onAddTap,
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
@@ -691,15 +743,10 @@ class _MealSectionState extends State<_MealSection> {
   }
 }
 
-class _ItemsList extends StatelessWidget {
-  final List<String> items;
-  final bool centerWhenEmpty;
-  final bool onPrimaryContext; // true => texto branco; false => onSurface
-  const _ItemsList({
-    required this.items,
-    this.centerWhenEmpty = false,
-    this.onPrimaryContext = true,
-  });
+class _MealItemsList extends StatelessWidget {
+  final List<MealEntry> items;
+  final void Function(MealEntry e)? onRemove;
+  const _MealItemsList({required this.items, this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -707,32 +754,82 @@ class _ItemsList extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     if (items.isEmpty) {
-      final clr = onPrimaryContext
-          ? cs.onPrimary.withValues(alpha: .9)
-          : cs.onSurface.withValues(alpha: .7);
-      final text = Text(
-        "Sem itens adicionados.",
-        style: tt.bodyMedium?.copyWith(color: clr, fontWeight: FontWeight.w600),
-        textAlign: TextAlign.center,
+      return Center(
+        child: Text(
+          "Sem itens adicionados.",
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: .7),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       );
-      return centerWhenEmpty ? Center(child: text) : text;
     }
 
-    final clr = onPrimaryContext ? cs.onPrimary : cs.onSurface;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final t in items)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text("• $t", style: tt.bodyMedium?.copyWith(color: clr)),
+      children: items.map((e) {
+        final kcal = (e.calories ?? 0).round();
+        final subtitleParts = <String>[];
+        if ((e.brand ?? '').isNotEmpty) subtitleParts.add(e.brand!);
+        final bc = e.barcode?.trim();
+        if (bc != null && bc.isNotEmpty) subtitleParts.add(bc);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant),
           ),
-      ],
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.name,
+                      style: tt.titleSmall?.copyWith(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (subtitleParts.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          subtitleParts.join(' • '),
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                "$kcal kcal",
+                style: tt.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Remover',
+                icon: Icon(Icons.delete_outline_rounded, color: cs.error),
+                onPressed: (onRemove == null) ? null : () => onRemove!(e),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }
 
-/// --------- ÁGUA (header + progress + footer "Adicionar água" com bottom-sheet) ---------
+/* ============================ ÁGUA + AÇÕES (mantidos) ============================ */
+
 class _WaterCard extends StatefulWidget {
   const _WaterCard();
 
@@ -788,7 +885,6 @@ class _WaterCardState extends State<_WaterCard> {
         borderRadius: BorderRadius.circular(16),
         child: Column(
           children: [
-            // HEADER verde
             Material(
               color: cs.primary,
               child: InkWell(
@@ -841,8 +937,6 @@ class _WaterCardState extends State<_WaterCard> {
                 ),
               ),
             ),
-
-            // BODY branco (apenas progress)
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 180),
               crossFadeState: _expanded
@@ -871,8 +965,6 @@ class _WaterCardState extends State<_WaterCard> {
               ),
               secondChild: const SizedBox.shrink(),
             ),
-
-            // FOOTER “Adicionar água” (abre bottom-sheet)
             Material(
               color: Colors.white,
               child: InkWell(
@@ -884,7 +976,7 @@ class _WaterCardState extends State<_WaterCard> {
                     child: Text(
                       "Adicionar água",
                       style: tt.titleMedium?.copyWith(
-                        color: cs.primary,
+                        color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -899,7 +991,6 @@ class _WaterCardState extends State<_WaterCard> {
   }
 }
 
-/// --------- Bottom sheet: quantidade + unidade + Somar/Subtrair ---------
 class _CustomAmountSheet extends StatefulWidget {
   const _CustomAmountSheet();
 
@@ -947,7 +1038,6 @@ class _CustomAmountSheetState extends State<_CustomAmountSheet> {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 16),
-
           Row(
             children: [
               Expanded(
@@ -982,7 +1072,6 @@ class _CustomAmountSheetState extends State<_CustomAmountSheet> {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
           SegmentedButton<bool>(
             segments: const [
@@ -995,7 +1084,6 @@ class _CustomAmountSheetState extends State<_CustomAmountSheet> {
               side: WidgetStatePropertyAll(BorderSide(color: cs.primary)),
             ),
           ),
-
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -1024,7 +1112,6 @@ class _CustomAmountResult {
   const _CustomAmountResult({required this.valueMl, required this.isSubtract});
 }
 
-/// --------- AÇÕES FINAIS (pills tonais + CTA em gradiente) ---------
 class _BottomActions extends StatelessWidget {
   const _BottomActions();
 
@@ -1033,7 +1120,6 @@ class _BottomActions extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    // Gradiente Fresh Green (#4CAF6D) → Leafy Green (#66BB6A)
     const freshGreen = Color(0xFF4CAF6D);
     const leafyGreen = Color(0xFF66BB6A);
 
