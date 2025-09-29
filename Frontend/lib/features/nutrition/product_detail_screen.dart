@@ -7,10 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../../data/meals_api.dart';
 import '../../data/products_api.dart'; // cliente dos endpoints /api/products/*
 
-/// NutriScore — ProductDetailScreen (v9.3)
+/// NutriScore — ProductDetailScreen (v11.0)
+/// - Suporta modo leitura via `readOnly` (esconde controles e CTA)
 /// - Usa ProductsApi.I.getByBarcode(barcode)
 /// - Usa ProductsApi.I.toggleFavorite(barcode)
-/// - Grava refeição via MealsApi.I.add(...)
+/// - Grava refeição via MealsApi.I.add(...) e depois faz go('/nutrition')
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({
     super.key,
@@ -39,6 +40,10 @@ class ProductDetailScreen extends StatefulWidget {
     this.nutriScore,
     this.initialMeal,
     this.date,
+
+    // Modo leitura (apenas ver; sem CTA e sem controles de porção/refeição)
+    this.readOnly = false,
+    this.freezeFromEntry = false,
   });
 
   final String? barcode;
@@ -61,6 +66,11 @@ class ProductDetailScreen extends StatefulWidget {
   final String? nutriScore;
   final MealType? initialMeal;
   final DateTime? date;
+
+  /// Quando `true`, a screen fica só leitura (sem dropdown de refeição,
+  /// sem input de porção e sem CTA "Adicionar").
+  final bool readOnly;
+  final bool freezeFromEntry;
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
@@ -100,6 +110,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _maybeFetch();
   }
 
+  String _effectiveBaseLabel(double portions) {
+    final base = _baseLabel.trim().toLowerCase();
+    final m = RegExp(r'(\d+(?:[.,]\d+)?)\s*(g|ml)\b').firstMatch(base);
+    if (m != null) {
+      final raw = double.tryParse(m.group(1)!.replaceAll(',', '.')) ?? 0.0;
+      final unit = m.group(2)!;
+      final val = raw * portions;
+      final str = (val % 1 == 0)
+          ? val.toStringAsFixed(0)
+          : val.toStringAsFixed(1);
+      return '$str $unit';
+    }
+    if (base.contains('porç') || base.contains('unid')) {
+      final str = (portions % 1 == 0)
+          ? portions.toStringAsFixed(0)
+          : portions.toStringAsFixed(1);
+      return '$str $base';
+    }
+    if (portions == 1) return _baseLabel;
+    final mult = (portions % 1 == 0)
+        ? portions.toStringAsFixed(0)
+        : portions.toStringAsFixed(1);
+    return '$mult × $_baseLabel';
+  }
+
   void _hydrateWithFallback() {
     _name = widget.name;
     _brand = widget.brand;
@@ -128,14 +163,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       if (!mounted) return;
 
       final hasServ = d.kcalServ != null && d.kcalServ! > 0;
+      final shouldFreeze = widget.readOnly && widget.freezeFromEntry;
 
       setState(() {
         _name = d.name;
-        _brand = d.brand;
+        _brand = d.brand ?? _brand;
         _origin = (d.origin ?? '').split(',').first.trim().isEmpty
-            ? null
+            ? _origin
             : d.origin;
-        _nutri = d.nutriScore;
+        _nutri = d.nutriScore ?? _nutri;
+        _favorited = d.isFavorite == true;
+
+        if (shouldFreeze) {
+          return; // não sobrescreve porção/kcal/macros
+        }
 
         // ===== derivar label base + kcal base com precisão =====
         final rawServ = (d.servingSize ?? '').trim(); // ex.: "41,5 g", "330 ml"
@@ -238,6 +279,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final pKcalScaled = pKcal * scale;
     final cKcalScaled = cKcal * scale;
     final fKcalScaled = fKcal * scale;
+    final effectiveLabel = _effectiveBaseLabel(_portions);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -270,7 +312,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           Expanded(
                             child: Center(
                               child: Text(
-                                "Detalhe do alimento",
+                                widget.readOnly
+                                    ? "Detalhe do alimento"
+                                    : "Adicionar alimento",
                                 style: tt.titleLarge?.copyWith(
                                   color: cs.onPrimary,
                                   fontWeight: FontWeight.w900,
@@ -279,7 +323,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             ),
                           ),
                           IconButton(
-                            tooltip: "Favorito",
+                            tooltip: _favorited
+                                ? "Remover dos favoritos"
+                                : "Favorito",
                             icon: Icon(
                               _favorited
                                   ? Icons.favorite_rounded
@@ -329,14 +375,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   subtitle: [
                     if ((_brand ?? '').isNotEmpty) _brand!,
                     if ((_origin ?? '').isNotEmpty) _origin!,
-                    _baseLabel,
+                    effectiveLabel,
                   ].where((s) => s.isNotEmpty).join(" • "),
                   nutriScore: _nutri,
                 ),
               ),
             ),
 
-            // Donut + chips + controlos
+            // Donut + chips + (controlos — escondidos em readOnly)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               sliver: SliverToBoxAdapter(
@@ -365,7 +411,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       const SizedBox(height: 12),
 
-                      // Chips macro
+                      // Chips macro (mostram sempre)
                       Row(
                         children: [
                           Expanded(
@@ -396,19 +442,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
 
-                      _MealDropdown(
-                        value: _selectedMeal,
-                        onChanged: (v) => setState(() => _selectedMeal = v),
-                      ),
-                      const SizedBox(height: 12),
-
-                      _PortionInput(
-                        controller: _portionCtrl,
-                        baseLabel: _baseLabel,
-                        onChanged: (val) => setState(() => _portions = val),
-                      ),
+                      // Controles apenas quando não é readOnly
+                      if (!widget.readOnly) ...[
+                        const SizedBox(height: 12),
+                        _MealDropdown(
+                          value: _selectedMeal,
+                          onChanged: (v) => setState(() => _selectedMeal = v),
+                        ),
+                        const SizedBox(height: 12),
+                        _PortionInput(
+                          controller: _portionCtrl,
+                          baseLabel: effectiveLabel,
+                          onChanged: (val) => setState(() => _portions = val),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -455,77 +503,83 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
       ),
 
-      // CTA
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: (widget.barcode == null)
-                  ? null
-                  : () async {
-                      try {
-                        // Aceita "100 g", "125 g", "330 ml", "1 porção", etc.
-                        final base = _baseLabel.toLowerCase().trim();
+      // CTA — escondido quando readOnly
+      bottomNavigationBar: widget.readOnly
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: (widget.barcode == null)
+                        ? null
+                        : () async {
+                            try {
+                              // Aceita "100 g", "125 g", "330 ml", "1 porção", etc.
+                              final base = _baseLabel.toLowerCase().trim();
 
-                        // Tenta apanhar um número + unidade (g|ml)
-                        final match = RegExp(
-                          r'(\d+(?:[.,]\d+)?)\s*(g|ml)\b',
-                        ).firstMatch(base);
+                              // Tenta apanhar um número + unidade (g|ml)
+                              final match = RegExp(
+                                r'(\d+(?:[.,]\d+)?)\s*(g|ml)\b',
+                              ).firstMatch(base);
 
-                        num? qGrams;
-                        num? qMl;
-                        num? qServ;
+                              num? qGrams;
+                              num? qMl;
+                              num? qServ;
 
-                        if (match != null) {
-                          final n =
-                              num.tryParse(
-                                match.group(1)!.replaceAll(',', '.'),
-                              ) ??
-                              100;
-                          final unitStr = match.group(2); // "g" | "ml"
-                          if (unitStr == 'g') {
-                            qGrams = _portions * n;
-                          } else {
-                            qMl = _portions * n;
-                          }
-                        } else {
-                          // Não há número + (g|ml) → tratamos como "porção/unidade"
-                          qServ = _portions;
-                        }
+                              if (match != null) {
+                                final n =
+                                    num.tryParse(
+                                      match.group(1)!.replaceAll(',', '.'),
+                                    ) ??
+                                    100;
+                                final unitStr = match.group(2); // "g" | "ml"
+                                if (unitStr == 'g') {
+                                  qGrams = _portions * n;
+                                } else {
+                                  qMl = _portions * n;
+                                }
+                              } else {
+                                // Não há número + (g|ml) → tratamos como "porção/unidade"
+                                qServ = _portions;
+                              }
 
-                        await MealsApi.I.add(
-                          at: widget.date ?? DateTime.now(),
-                          meal: _selectedMeal,
-                          barcode: widget.barcode!,
-                          name: _name,
-                          brand: _brand,
-                          quantityGrams: qGrams,
-                          quantityMl: qMl,
-                          servings: qServ,
-                          calories: (_kcalBase * _portions).round(),
-                          protein: _p * _portions,
-                          carbs: _c * _portions,
-                          fat: _f * _portions,
-                          sugars: _sugar * _portions,
-                          salt: _salt * _portions,
-                        );
+                              await MealsApi.I.add(
+                                at: widget.date ?? DateTime.now(),
+                                meal: _selectedMeal,
+                                barcode: widget.barcode!,
+                                name: _name,
+                                brand: _brand,
+                                quantityGrams: qGrams,
+                                quantityMl: qMl,
+                                servings: qServ,
+                                calories: (_kcalBase * _portions).round(),
+                                protein: _p * _portions,
+                                carbs: _c * _portions,
+                                fat: _f * _portions,
+                                sugars: _sugar * _portions,
+                                salt: _salt * _portions,
+                              );
 
-                        if (context.mounted) context.pop(true);
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text(e.toString())));
-                      }
-                    },
-              child: Text("Adicionar ao ${_selectedMeal.labelPt}"),
+                              if (!context.mounted) return;
+                              // Redireciona para o NutritionScreen após adicionar
+                              context.go(
+                                '/diary?ts=${DateTime.now().millisecondsSinceEpoch}',
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.toString())),
+                              );
+                            }
+                          },
+                    child: Text("Adicionar ao ${_selectedMeal.labelPt}"),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -599,15 +653,15 @@ class _InfoCard extends StatelessWidget {
     Color nutriColor(String g) {
       switch (g.toUpperCase()) {
         case "A":
-          return const Color(0xFF4CAF6D);
+          return const Color(0xFF4CAF6D); // Fresh Green
         case "B":
-          return const Color(0xFF66BB6A);
+          return const Color(0xFF66BB6A); // Leafy Green
         case "C":
-          return const Color(0xFFFFC107);
+          return const Color(0xFFFFC107); // Golden Amber
         case "D":
-          return const Color(0xFFFF8A4C);
+          return const Color(0xFFFF8A4C); // Warm Tangerine
         case "E":
-          return const Color(0xFFE53935);
+          return const Color(0xFFE53935); // Ripe Red
         default:
           return cs.primary;
       }
@@ -882,7 +936,7 @@ class _NutritionInfo extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Valores por $baseLabel (x porções aplicadas)",
+          "Valores por $baseLabel${baseLabel.isNotEmpty ? '' : ''}",
           style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
         ),
         const SizedBox(height: 8),

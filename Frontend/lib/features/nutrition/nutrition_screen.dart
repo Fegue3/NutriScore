@@ -313,6 +313,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 kcalDin: _sumKcal(_din),
                 onTapAddFood: _openAddFor,
                 onRemove: _removeEntry,
+                onTapItem: _openEntry,
               ),
             ),
           ),
@@ -320,6 +321,38 @@ class _NutritionScreenState extends State<NutritionScreen> {
       ),
     );
   }
+
+void _openEntry(MealEntry e) {
+  // label da quantidade exatamente como o user registou
+  String? baseLabel;
+  if (e.quantityGrams != null) {
+    baseLabel = '${e.quantityGrams!.round()} g';
+  } else if (e.quantityMl != null) {
+    baseLabel = '${e.quantityMl!.round()} ml';
+  } else if (e.servings != null) {
+    baseLabel = (e.servings! % 1 == 0)
+        ? '${e.servings!.toInt()} porção'
+        : '${e.servings!.toStringAsFixed(1)} porções';
+  }
+
+  // Abre em readOnly com os valores registados pelo user
+  context.pushNamed(
+    'productDetail',
+    extra: {
+      'barcode': e.barcode,        // se houver
+      'readOnly': true,
+      'name': e.name,
+      'brand': e.brand,
+      'baseQuantityLabel': baseLabel ?? '1 porção',
+      'kcalPerBase': (e.calories ?? 0).round(),
+      'proteinGPerBase': e.protein, // estes existem no teu modelo
+      'carbsGPerBase': e.carbs,
+      'fatGPerBase': e.fat,
+      'freezeFromEntry': true,     // sinal para não sobrescrever no fetch
+    },
+  );
+}
+
 }
 
 /* ============================ AUXILIARES ============================ */
@@ -351,6 +384,7 @@ class _DayContent extends StatelessWidget {
   final int kcalBrk, kcalLun, kcalSnk, kcalDin;
   final void Function(String mealTitle) onTapAddFood;
   final void Function(MealEntry e) onRemove;
+  final void Function(MealEntry e) onTapItem;
 
   const _DayContent({
     super.key,
@@ -364,6 +398,7 @@ class _DayContent extends StatelessWidget {
     required this.kcalDin,
     required this.onTapAddFood,
     required this.onRemove,
+    required this.onTapItem,
   });
 
   @override
@@ -385,6 +420,7 @@ class _DayContent extends StatelessWidget {
             onAddTap: () => onTapAddFood("Pequeno-almoço"),
             onRemove: onRemove,
             initiallyExpanded: brk.isNotEmpty,
+            onTapItem: onTapItem,
           ),
           const SizedBox(height: 16),
           _MealSection(
@@ -394,6 +430,7 @@ class _DayContent extends StatelessWidget {
             onAddTap: () => onTapAddFood("Almoço"),
             onRemove: onRemove,
             initiallyExpanded: lun.isNotEmpty, // default
+            onTapItem: onTapItem,
           ),
           const SizedBox(height: 16),
           _MealSection(
@@ -403,6 +440,7 @@ class _DayContent extends StatelessWidget {
             onAddTap: () => onTapAddFood("Lanche"),
             onRemove: onRemove,
             initiallyExpanded: snk.isNotEmpty,
+            onTapItem: onTapItem,
           ),
           const SizedBox(height: 16),
           _MealSection(
@@ -412,6 +450,7 @@ class _DayContent extends StatelessWidget {
             onAddTap: () => onTapAddFood("Jantar"),
             onRemove: onRemove,
             initiallyExpanded: din.isNotEmpty,
+            onTapItem: onTapItem,
           ),
           const SizedBox(height: 16),
           const _WaterCard(),
@@ -601,6 +640,7 @@ class _MealSection extends StatefulWidget {
   final VoidCallback? onAddTap;
   final void Function(MealEntry e)? onRemove;
   final bool initiallyExpanded;
+  final void Function(MealEntry e)? onTapItem;
 
   const _MealSection({
     required this.title,
@@ -609,6 +649,7 @@ class _MealSection extends StatefulWidget {
     this.onAddTap,
     this.onRemove,
     this.initiallyExpanded = false,
+    this.onTapItem,
   });
 
   @override
@@ -723,6 +764,7 @@ class _MealSectionState extends State<_MealSection> {
                 child: _MealItemsList(
                   items: widget.items,
                   onRemove: widget.onRemove,
+                  onTapItem: widget.onTapItem,
                 ),
               ),
               secondChild: const SizedBox.shrink(),
@@ -765,7 +807,9 @@ class _MealSectionState extends State<_MealSection> {
 class _MealItemsList extends StatelessWidget {
   final List<MealEntry> items;
   final void Function(MealEntry e)? onRemove;
-  const _MealItemsList({required this.items, this.onRemove});
+  final void Function(MealEntry e)? onTapItem;
+
+  const _MealItemsList({required this.items, this.onRemove, this.onTapItem});
 
   @override
   Widget build(BuildContext context) {
@@ -806,113 +850,116 @@ class _MealItemsList extends StatelessWidget {
               : '${e.servings!.toStringAsFixed(1)} porções';
         }
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant,
+        // >>> AQUI: envolve o cartão num InkWell e chama onTapItem <<<
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onTapItem?.call(e),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // NOME (agora vem do backend)
-                        Text(
-                          e.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontWeight: FontWeight.w800,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // NOME
+                          Text(
+                            e.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                          if (subtitleParts.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                subtitleParts.join(' • '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
                               ),
-                        ),
-                        if (subtitleParts.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              subtitleParts.join(' • '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
                             ),
-                          ),
-                        if (qtyLabel != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              qtyLabel,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
+                          if (qtyLabel != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                qtyLabel,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  // badge kcal
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: ShapeDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: const StadiumBorder(),
-                    ),
-                    child: Text(
-                      "$kcal kcal",
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: .2,
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
 
-                  // remover — maior e alinhado
-                  IconButton(
-                    tooltip: 'Remover',
-                    icon: Icon(
-                      Icons.delete_outline_rounded,
-                      color: Theme.of(context).colorScheme.error,
+                    // badge kcal
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: ShapeDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: const StadiumBorder(),
+                      ),
+                      child: Text(
+                        "$kcal kcal",
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: .2,
+                        ),
+                      ),
                     ),
-                    iconSize: 22, // ↑ antes estava ~18
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(
-                      minWidth: 40,
-                      minHeight: 40,
+                    const SizedBox(width: 8),
+
+                    // remover
+                    IconButton(
+                      tooltip: 'Remover',
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      iconSize: 22,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      onPressed: (onRemove == null) ? null : () => onRemove!(e),
                     ),
-                    onPressed: (onRemove == null) ? null : () => onRemove!(e),
-                  ),
-
-                  const SizedBox(width: 6),
-
-                ],
-              ),
-              // (se não quiseres NutriScore/macro aqui, podes deixar só isto)
-            ],
+                    const SizedBox(width: 6),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       }).toList(),
