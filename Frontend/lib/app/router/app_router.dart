@@ -16,6 +16,7 @@ import '../../features/settings/settings_screen.dart';
 
 import '../app_shell.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/meals_api.dart'; // MealType, MealTypeX
 
 class _AuthRefresh extends ChangeNotifier {
   _AuthRefresh(this._repo) {
@@ -74,37 +75,52 @@ GoRouter buildAppRouter(AuthRepository repo) {
       // Fullscreen fora do shell
       GoRoute(
         path: '/add-food',
-        builder: (_, state) =>
-            AddFoodScreen(initialMeal: state.uri.queryParameters['meal']),
+        builder: (_, state) {
+          // Pode vir por query (?meal=Almoço) ou por extra (enum)
+          final ex = state.extra;
+          final MealType? extraMeal = ex is MealType ? ex : null;
+          final MealType? initialMeal =
+              extraMeal ?? MealTypeX.fromLabelPt(state.uri.queryParameters['meal']);
+
+          return AddFoodScreen(initialMeal: initialMeal);
+        },
       ),
 
-      // Detalhe do produto
+      // Detalhe do produto (tolerante a tipos vindos em 'extra')
       GoRoute(
         name: 'productDetail',
         path: '/product-detail',
         builder: (_, state) {
           final m = (state.extra as Map?) ?? {};
+
           num? n(Object? x) =>
               x is num ? x : (x is String ? num.tryParse(x) : null);
 
+          // initialMeal pode chegar como MealType (enum) OU String
+          final dynamic rawInitial = m['initialMeal'];
+          final MealType? initialMeal = switch (rawInitial) {
+            MealType v => v,
+            _ => MealTypeX.fromLabelPt(rawInitial?.toString()),
+          };
+
           return ProductDetailScreen(
             key: state.pageKey,
-            barcode: m["barcode"] as String?,
-            name: m["name"] as String? ?? "Produto",
-            brand: m["brand"] as String?,
-            origin: m["origin"] as String?,
-            baseQuantityLabel: m["baseQuantityLabel"] as String? ?? "100 g",
-            kcalPerBase: (n(m["kcalPerBase"]) ?? 0).toInt(),
-            proteinGPerBase: (n(m["proteinGPerBase"]) ?? 0).toDouble(),
-            carbsGPerBase: (n(m["carbsGPerBase"]) ?? 0).toDouble(),
-            fatGPerBase: (n(m["fatGPerBase"]) ?? 0).toDouble(),
-            saltGPerBase: n(m["saltGPerBase"])?.toDouble(),
-            sugarsGPerBase: n(m["sugarsGPerBase"])?.toDouble(),
-            satFatGPerBase: n(m["satFatGPerBase"])?.toDouble(),
-            fiberGPerBase: n(m["fiberGPerBase"])?.toDouble(),
-            sodiumGPerBase: n(m["sodiumGPerBase"])?.toDouble(),
-            nutriScore: m["nutriScore"] as String?,
-            initialMeal: m["initialMeal"] as String?,
+            barcode: m['barcode']?.toString(),
+            name: m['name']?.toString() ?? 'Produto',
+            brand: m['brand']?.toString(),
+            origin: m['origin']?.toString(),
+            baseQuantityLabel: m['baseQuantityLabel']?.toString() ?? '100 g',
+            kcalPerBase: (n(m['kcalPerBase']) ?? 0).toInt(),
+            proteinGPerBase: (n(m['proteinGPerBase']) ?? 0).toDouble(),
+            carbsGPerBase: (n(m['carbsGPerBase']) ?? 0).toDouble(),
+            fatGPerBase: (n(m['fatGPerBase']) ?? 0).toDouble(),
+            saltGPerBase: n(m['saltGPerBase'])?.toDouble(),
+            sugarsGPerBase: n(m['sugarsGPerBase'])?.toDouble(),
+            satFatGPerBase: n(m['satFatGPerBase'])?.toDouble(),
+            fiberGPerBase: n(m['fiberGPerBase'])?.toDouble(),
+            sodiumGPerBase: n(m['sodiumGPerBase'])?.toDouble(),
+            nutriScore: m['nutriScore']?.toString(),
+            initialMeal: initialMeal,
           );
         },
       ),
