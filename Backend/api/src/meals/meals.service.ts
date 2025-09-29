@@ -1,108 +1,168 @@
+// src/meals/meals.service.ts
 import { Injectable } from '@nestjs/common';
+import { Prisma, MealType, Unit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateMealDto } from './meals.dto';
-import { Prisma } from '@prisma/client';
+import { CreateMealsDto } from './meals.dto';
+
+function toUtcMidnight(ymd: string): Date {
+  // ymd é YYYY-MM-DD no timezone do user → normalizamos para UTC 00:00
+  // isto evita cair "no dia anterior/seguinte" por causa do TZ
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+}
 
 @Injectable()
 export class MealsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async createMeal(userId: string, dto: CreateMealDto) {
-    // 1. cria ou encontra meal (para o dia e tipo)
-    let meal = await this.prisma.meal.findFirst({
-      where: {
-        userId,
-        date: new Date(dto.date),
-        type: dto.type,
+  /** GET /meals?date=YYYY-MM-DD — devolve o dia já com items+produto */
+  async getDay(userId: string, ymd: string) {
+    const date = toUtcMidnight(ymd);
+
+    const meals = await this.prisma.meal.findMany({
+      where: { userId, date },
+      orderBy: { type: 'asc' },
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: {
+            product: true,
+            customFood: true,
+          },
+        },
       },
     });
 
-    if (!meal) {
-      meal = await this.prisma.meal.create({
-        data: {
-          userId,
-          date: new Date(dto.date),
-          type: dto.type,
-          notes: dto.notes ?? null,
-          totalKcal: 0,
-        },
-      });
-    }
+    // Normalizamos num formato flat que o frontend já entende
+    const entries = meals.flatMap((meal) =>
+      meal.items.map((it) => ({
+        id: it.id,
+        at: meal.date,                               // dia da refeição
+        meal: meal.type,                             // tipo
+        // nome/brand vêm do produto ou do customFood; se nada, 'Produto'
+        name: it.customFood?.name ?? it.product?.name ?? 'Produto',
+        brand: it.customFood?.brand ?? it.product?.brand ?? null,
+        barcode: it.product?.barcode ?? null,
+        nutriScore: it.product?.nutriScore ?? null,
 
-    let totalKcal = meal.totalKcal ?? 0;
+        // totais/kcal/macros “congelados” no momento do registo (se existirem)
+        calories: it.kcal ?? null,
+        protein: it.protein ?? null,
+        carbs: it.carb ?? null,
+        fat: it.fat ?? null,
 
-    // 2. cria items
-    for (const item of dto.items) {
-      await this.prisma.mealItem.create({
-        data: {
-          mealId: meal.id,
-          productBarcode: item.barcode, // schema usa productBarcode
-          quantity: new Prisma.Decimal(item.quantity ?? 1), // Decimal no schema
-          kcal: item.calories ?? 0,
-          protein: item.protein ?? null,
-          carb: item.carb ?? null,
-          fat: item.fat ?? null,
-          sugars: item.sugars ?? null,
-          salt: item.salt ?? null,
-        },
-      });
+        // quantidade apresentada
+        quantityGrams: it.unit === Unit.GRAM ? Number(it.quantity) : null,
+        servings: it.unit === Unit.PIECE ? Number(it.quantity) : null,
+        unit: it.unit,
+      })),
+    );
 
-      // soma calorias (frontend já envia o valor total!)
-      if (item.calories) {
-        totalKcal += item.calories;
+    const totalCalories = entries.reduce((s, e) => s + (Number(e.calories) || 0), 0);
+
+    return {
+      date: ymd,
+      entries,
+      totalCalories,
+    };
+  }
+
+  /** POST /meals — adiciona items à refeição desse dia, criando/atualizando a Meal */
+  async add(userId: string, body: CreateMealsDto) {
+    const date = toUtcMidnight(body.date);
+
+    // upsert da Meal do dia/tipo
+    const meal = await this.prisma.meal.upsert({
+      where: { userId_date_type: { userId, date, type: body.type } },
+      create: { userId, date, type: body.type },
+      update: {},
+    });
+
+    // construir creates de items
+    const itemsData: Prisma.MealItemCreateManyMealInput[] = []; // para createMany de campos diretos
+    const relCreates: Prisma.MealItemCreateInput[] = [];        // quando há relations (product/customFood)
+
+    body.items.forEach((it, idx) => {
+      // normalização auxiliar para os caches
+      const kcal = it.calories ?? null;
+      const protein = it.protein ?? null;
+      const carb = it.carbs ?? null;
+      const fat = it.fat ?? null;
+      const sugars = it.sugars ?? null;
+      const salt = it.salt ?? null;
+
+      // gramsTotal: se unidade for GRAM, igual à quantidade; caso contrário null
+      const gramsTotal =
+        it.unit === Unit.GRAM ? new Prisma.Decimal(it.quantity) : null;
+
+      if (it.barcode) {
+        // Tem Product → precisamos do create com relation (não dá em createMany)
+        relCreates.push({
+          meal: { connect: { id: meal.id } },
+          position: idx + 1,
+          unit: it.unit,
+          quantity: new Prisma.Decimal(it.quantity),
+          gramsTotal,
+          product: { connect: { barcode: it.barcode } }, // << AQUI ESTÁ A LIGAÇÃO CORRETA
+          kcal,
+          protein: protein ? new Prisma.Decimal(protein) : null,
+          carb: carb ? new Prisma.Decimal(carb) : null,
+          fat: fat ? new Prisma.Decimal(fat) : null,
+          sugars: sugars ? new Prisma.Decimal(sugars) : null,
+          salt: salt ? new Prisma.Decimal(salt) : null,
+        });
+      } else if (it.customFoodId) {
+        relCreates.push({
+          meal: { connect: { id: meal.id } },
+          position: idx + 1,
+          unit: it.unit,
+          quantity: new Prisma.Decimal(it.quantity),
+          gramsTotal,
+          customFood: { connect: { id: it.customFoodId } },
+          kcal,
+          protein: protein ? new Prisma.Decimal(protein) : null,
+          carb: carb ? new Prisma.Decimal(carb) : null,
+          fat: fat ? new Prisma.Decimal(fat) : null,
+          sugars: sugars ? new Prisma.Decimal(sugars) : null,
+          salt: salt ? new Prisma.Decimal(salt) : null,
+        });
+      } else {
+        // nenhum dos dois — criamos “solto” (sem relação), possível em alguns fluxos
+        relCreates.push({
+          meal: { connect: { id: meal.id } },
+          position: idx + 1,
+          unit: it.unit,
+          quantity: new Prisma.Decimal(it.quantity),
+          gramsTotal,
+          kcal,
+          protein: protein ? new Prisma.Decimal(protein) : null,
+          carb: carb ? new Prisma.Decimal(carb) : null,
+          fat: fat ? new Prisma.Decimal(fat) : null,
+          sugars: sugars ? new Prisma.Decimal(sugars) : null,
+          salt: salt ? new Prisma.Decimal(salt) : null,
+        });
       }
-
-      // 3. grava também em product_history
-      await this.prisma.productHistory.create({
-        data: {
-          userId,
-          barcode: item.barcode,
-          nutriScore: (item as any).nutriscore ?? null, // NutriGrade enum no schema
-          calories: item.calories ?? 0,
-          proteins: item.protein ?? null,
-          carbs: item.carb ?? null,
-          fat: item.fat ?? null,
-          scannedAt: new Date(dto.date), // usa a data recebida
-        },
-      });
-    }
-
-    // 4. atualiza total kcal da refeição
-    await this.prisma.meal.update({
-      where: { id: meal.id },
-      data: { totalKcal },
     });
 
-    return this.findMealById(userId, meal.id);
+    // Criamos um a um (porque temos relations). Se quiseres performance máxima, dá para batch com createMany
+    // mas perdes a parte do connect ao Product/CustomFood.
+    await this.prisma.$transaction(
+      relCreates.map((data) => this.prisma.mealItem.create({ data })),
+    );
+
+    // devolvemos o dia atualizado
+    return this.getDay(userId, body.date);
   }
 
-  async findMealById(userId: string, mealId: string) {
-    return this.prisma.meal.findFirst({
-      where: { id: mealId, userId },
-      include: { items: true },
-    });
+  async deleteMeal(mealId: string) {
+    await this.prisma.meal.delete({ where: { id: mealId } });
   }
 
-  async findAllMeals(userId: string) {
-    return this.prisma.meal.findMany({
-      where: { userId },
-      include: { items: true },
-      orderBy: [{ date: 'desc' }, { type: 'asc' }],
-    });
+  async deleteMealItem(mealId: string, itemId: string) {
+    await this.prisma.mealItem.delete({ where: { id: itemId, mealId } as any });
   }
 
-  async findMealsByDate(userId: string, date: string) {
-    const target = new Date(date);
-    const start = new Date(target.setHours(0, 0, 0, 0));
-    const end = new Date(target.setHours(23, 59, 59, 999));
-
-    return this.prisma.meal.findMany({
-      where: {
-        userId,
-        date: { gte: start, lte: end },
-      },
-      include: { items: true },
-      orderBy: [{ type: 'asc' }],
-    });
+  async deleteItemById(itemId: string) {
+    await this.prisma.mealItem.delete({ where: { id: itemId } });
   }
 }
