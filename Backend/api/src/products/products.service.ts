@@ -10,7 +10,7 @@ type DateLike = string | Date | null | undefined;
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /* ===================== Utils ===================== */
 
@@ -112,9 +112,9 @@ export class ProductsService {
         // (fix) fallback a partir do histórico quando OFF/cache falham
         const lastHist = userId
           ? await this.prisma.productHistory.findFirst({
-              where: { userId, barcode },
-              orderBy: { scannedAt: 'desc' },
-            })
+            where: { userId, barcode },
+            orderBy: { scannedAt: 'desc' },
+          })
           : null;
 
         if (lastHist) {
@@ -232,8 +232,12 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    // 🔥 remove nome vazio / só espaços
+    const clean = items.filter(it => (it.name ?? '').replace(/\s+/g, '').length > 0);
+
+    return { items: clean, total, page, pageSize };
   }
+
 
   // ------------ Sugestões locais (rápidas) ------------
   async suggestLocal(q: string, limit = 8) {
@@ -253,13 +257,21 @@ export class ProductsService {
       }),
       this.prisma.product.count({ where }),
     ]);
-    return { items, total };
+
+    //remove nome vazio / só espaços
+    const clean = items.filter(it => (it.name ?? '').replace(/\s+/g, '').length > 0);
+
+    return { items: clean, total };
   }
 
   // ------------ Pesquisa confirmada (vai à OFF agora) ------------
   async searchConfirm(q: string, page = 1, pageSize = 20) {
     const off = await offSearch(q, page, pageSize);
-    const valid = off.products.filter((p) => !!p.code);
+
+    // 🔥 só produtos com código e nome “real”
+    const valid = off.products.filter(
+      (p) => !!p.code && ((p.product_name ?? '').replace(/\s+/g, '').length > 0),
+    );
 
     const upserts = valid.map((p) => {
       const mapped = this.mapOffToDb(p);
@@ -282,14 +294,18 @@ export class ProductsService {
       take: pageSize,
     });
 
+    // 🔥 remove nome vazio / só espaços
+    const clean = items.filter(it => (it.name ?? '').replace(/\s+/g, '').length > 0);
+
     return {
-      items,
-      total: off.count ?? items.length,
+      items: clean,
+      total: off.count ?? clean.length,
       page,
       pageSize,
       source: 'OFF+cache',
     };
   }
+
 
   // ------------ Pesquisa híbrida (local + enrichment async) ------------
   async searchHybrid(q: string, page = 1, pageSize = 20) {
@@ -307,7 +323,7 @@ export class ProductsService {
         });
       });
       if (upserts.length) {
-        this.prisma.$transaction(upserts).catch(() => {});
+        this.prisma.$transaction(upserts).catch(() => { });
       }
     } catch {
       // ignora erros da OFF
@@ -368,7 +384,6 @@ export class ProductsService {
       this.prisma.productHistory.count({ where }),
     ]);
 
-    // ✅ Fix BigInt -> string (e futuros BigInt aninhados)
     const safeItems = rows.map((r) =>
       this.replaceBigInts({
         ...r,
