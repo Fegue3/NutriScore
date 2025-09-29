@@ -106,7 +106,6 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   }
 
   Future<void> _openDetailFromSummary(ProductSummary it) async {
-    final day = widget.selectedDate ?? DateTime.now();
     await context.pushNamed(
       'productDetail',
       extra: {
@@ -117,7 +116,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
         "kcalPerBase": it.energyKcal100g ?? 0,
         "nutriScore": it.nutriScore,
         "initialMeal": _selectedMeal.labelPt,
-        "date": day,
+        "date":  widget.selectedDate,
       },
     );
     if (!mounted) return;
