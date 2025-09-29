@@ -76,13 +76,19 @@ GoRouter buildAppRouter(AuthRepository repo) {
       GoRoute(
         path: '/add-food',
         builder: (_, state) {
-          // Pode vir por query (?meal=Almoço) ou por extra (enum)
-          final ex = state.extra;
-          final MealType? extraMeal = ex is MealType ? ex : null;
-          final MealType? initialMeal =
-              extraMeal ?? MealTypeX.fromLabelPt(state.uri.queryParameters['meal']);
+          // Pode vir por query (?meal=Almoço&date=2025-09-28)
+          final mealLabel = state.uri.queryParameters['meal'];
+          final MealType? initialMeal = MealTypeX.fromLabelPt(mealLabel);
 
-          return AddFoodScreen(initialMeal: initialMeal);
+          final dateStr = state.uri.queryParameters['date'];
+          final selectedDate = dateStr != null
+              ? DateTime.tryParse(dateStr)
+              : null;
+
+          return AddFoodScreen(
+            initialMeal: initialMeal,
+            selectedDate: selectedDate,
+          );
         },
       ),
 
@@ -92,6 +98,14 @@ GoRouter buildAppRouter(AuthRepository repo) {
         path: '/product-detail',
         builder: (_, state) {
           final m = (state.extra as Map?) ?? {};
+          DateTime? parseDate(dynamic v) {
+            if (v is DateTime) return v;
+            if (v is String) return DateTime.tryParse(v);
+            if (v is num) return DateTime.fromMillisecondsSinceEpoch(v.toInt());
+            return null;
+          }
+
+          final DateTime? date = parseDate(m['date']);
 
           num? n(Object? x) =>
               x is num ? x : (x is String ? num.tryParse(x) : null);
@@ -121,6 +135,7 @@ GoRouter buildAppRouter(AuthRepository repo) {
             sodiumGPerBase: n(m['sodiumGPerBase'])?.toDouble(),
             nutriScore: m['nutriScore']?.toString(),
             initialMeal: initialMeal,
+            date: date,
           );
         },
       ),
@@ -131,8 +146,7 @@ GoRouter buildAppRouter(AuthRepository repo) {
         routes: [
           GoRoute(
             path: '/dashboard',
-            pageBuilder: (_, __) =>
-                const NoTransitionPage(child: HomeScreen()),
+            pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
           ),
           GoRoute(
             path: '/diary',
