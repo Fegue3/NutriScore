@@ -13,6 +13,7 @@ import '../../features/nutrition/nutrition_screen.dart';
 import '../../features/nutrition/add_food_screen.dart';
 import '../../features/nutrition/product_detail_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/nutrition/nutrition_stats_screen.dart';
 
 import '../app_shell.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -81,8 +82,9 @@ GoRouter buildAppRouter(AuthRepository repo) {
           final MealType? initialMeal = MealTypeX.fromLabelPt(mealLabel);
 
           final dateStr = state.uri.queryParameters['date'];
-          final selectedDate =
-              dateStr != null ? DateTime.tryParse(dateStr) : null;
+          final selectedDate = dateStr != null
+              ? DateTime.tryParse(dateStr)
+              : null;
 
           return AddFoodScreen(
             initialMeal: initialMeal,
@@ -99,7 +101,6 @@ GoRouter buildAppRouter(AuthRepository repo) {
           final m = (state.extra as Map?) ?? const {};
 
           bool qBool(String? v) => v == '1' || (v?.toLowerCase() == 'true');
-
 
           final readOnly =
               (m['readOnly'] == true) ||
@@ -135,8 +136,7 @@ GoRouter buildAppRouter(AuthRepository repo) {
             name: m['name']?.toString() ?? 'Produto',
             brand: m['brand']?.toString(),
             origin: m['origin']?.toString(),
-            baseQuantityLabel:
-                m['baseQuantityLabel']?.toString() ?? '100 g',
+            baseQuantityLabel: m['baseQuantityLabel']?.toString() ?? '100 g',
             kcalPerBase: (n(m['kcalPerBase']) ?? 0).toInt(),
             proteinGPerBase: (n(m['proteinGPerBase']) ?? 0).toDouble(),
             carbsGPerBase: (n(m['carbsGPerBase']) ?? 0).toDouble(),
@@ -154,6 +154,11 @@ GoRouter buildAppRouter(AuthRepository repo) {
           );
         },
       ),
+      GoRoute(
+        path: '/nutrition/stats',
+        name: 'nutritionStats',
+        builder: (ctx, st) => const NutritionStatsScreen(),
+      ),
 
       // Shell com bottom nav
       ShellRoute(
@@ -161,15 +166,16 @@ GoRouter buildAppRouter(AuthRepository repo) {
         routes: [
           GoRoute(
             path: '/dashboard',
-            pageBuilder: (_, __) =>
-                const NoTransitionPage(child: HomeScreen()),
+            pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
           ),
           GoRoute(
             path: '/diary',
             pageBuilder: (_, state) => NoTransitionPage(
               key: state.pageKey, // força recriação da page quando a URL muda
               child: NutritionScreen(
-                key: ValueKey(state.uri.toString()), // reforça rebuild por query
+                key: ValueKey(
+                  state.uri.toString(),
+                ), // reforça rebuild por query
               ),
             ),
           ),
