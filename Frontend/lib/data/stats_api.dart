@@ -1,0 +1,184 @@
+// lib/data/stats_api.dart
+import 'dart:convert';
+import 'package:dio/dio.dart';
+
+import 'auth_api.dart';       // -> AuthApi.baseUrl
+import 'auth_storage.dart';   // -> AuthStorage.I.readAccessToken()
+
+class DailyTotals {
+  final int kcal;
+  final num proteinG;
+  final num carbG;
+  final num fatG;
+  final num sugarsG;
+  final num fiberG;
+  final num saltG;
+
+  const DailyTotals({
+    required this.kcal,
+    required this.proteinG,
+    required this.carbG,
+    required this.fatG,
+    required this.sugarsG,
+    required this.fiberG,
+    required this.saltG,
+  });
+
+  factory DailyTotals.fromJson(Map<String, dynamic> j) => DailyTotals(
+        kcal: (j['kcal'] ?? 0) as int,
+        proteinG: (j['protein_g'] ?? 0) * 1.0,
+        carbG: (j['carb_g'] ?? 0) * 1.0,
+        fatG: (j['fat_g'] ?? 0) * 1.0,
+        sugarsG: (j['sugars_g'] ?? 0) * 1.0,
+        fiberG: (j['fiber_g'] ?? 0) * 1.0,
+        saltG: (j['salt_g'] ?? 0) * 1.0,
+      );
+}
+
+class MacroProgress {
+  final num used;
+  final num target;
+  final num left;
+  final num pct; // 0..1 (ou >1 se excedeu)
+
+  const MacroProgress({
+    required this.used,
+    required this.target,
+    required this.left,
+    required this.pct,
+  });
+
+  factory MacroProgress.fromJson(Map<String, dynamic> j) => MacroProgress(
+        used: (j['used'] ?? 0) * 1.0,
+        target: (j['target'] ?? 0) * 1.0,
+        left: (j['left'] ?? 0) * 1.0,
+        pct: ((j['pct'] ?? 0) as num) * 1.0,
+      );
+}
+
+class DailyGoals {
+  final int? kcal;
+  final num? proteinG;
+  final num? carbG;
+  final num? fatG;
+
+  const DailyGoals({this.kcal, this.proteinG, this.carbG, this.fatG});
+
+  factory DailyGoals.fromJson(Map<String, dynamic>? j) {
+    if (j == null) return const DailyGoals();
+    return DailyGoals(
+      kcal: j['kcal'] as int?,
+      proteinG: j['protein_g'] != null ? (j['protein_g'] as num) * 1.0 : null,
+      carbG: j['carb_g'] != null ? (j['carb_g'] as num) * 1.0 : null,
+      fatG: j['fat_g'] != null ? (j['fat_g'] as num) * 1.0 : null,
+    );
+  }
+}
+
+class DailyStats {
+  final DateTime date;
+  final DailyTotals totals;
+  final DailyGoals goals;
+  final MacroProgress? kcal;
+  final MacroProgress? protein;
+  final MacroProgress? carb;
+  final MacroProgress? fat;
+
+  const DailyStats({
+    required this.date,
+    required this.totals,
+    required this.goals,
+    this.kcal,
+    this.protein,
+    this.carb,
+    this.fat,
+  });
+
+  factory DailyStats.fromJson(Map<String, dynamic> j) {
+    DateTime parseDate(String s) =>
+        s.contains('T') ? DateTime.parse(s).toLocal() : DateTime.parse('${s}T00:00:00').toLocal();
+
+    final progress = (j['progress'] is Map) ? Map<String, dynamic>.from(j['progress']) : const {};
+    return DailyStats(
+      date: parseDate(j['date']?.toString() ?? DateTime.now().toIso8601String()),
+      totals: DailyTotals.fromJson(Map<String, dynamic>.from(j['totals'] ?? {})),
+      goals: DailyGoals.fromJson(j['goals'] is Map ? Map<String, dynamic>.from(j['goals']) : null),
+      kcal: progress['kcal'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['kcal'])) : null,
+      protein: progress['protein_g'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['protein_g'])) : null,
+      carb: progress['carb_g'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['carb_g'])) : null,
+      fat: progress['fat_g'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['fat_g'])) : null,
+    );
+  }
+}
+
+class RangePoint {
+  final DateTime date;
+  final int kcal;
+  final num proteinG;
+  final num carbG;
+  final num fatG;
+
+  const RangePoint({
+    required this.date,
+    required this.kcal,
+    required this.proteinG,
+    required this.carbG,
+    required this.fatG,
+  });
+
+  factory RangePoint.fromJson(Map<String, dynamic> j) => RangePoint(
+        date: DateTime.parse('${j['date']}T00:00:00').toLocal(),
+        kcal: (j['kcal'] ?? 0) as int,
+        proteinG: (j['protein_g'] ?? 0) * 1.0,
+        carbG: (j['carb_g'] ?? 0) * 1.0,
+        fatG: (j['fat_g'] ?? 0) * 1.0,
+      );
+}
+
+class StatsApi {
+  StatsApi._();
+  static final StatsApi I = StatsApi._();
+
+  Dio _dio() {
+    final dio = Dio(BaseOptions(baseUrl: AuthApi.baseUrl));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (opts, handler) async {
+          final token = await AuthStorage.I.readAccessToken();
+          if (token != null && token.isNotEmpty) {
+            opts.headers['Authorization'] = 'Bearer $token';
+          }
+          opts.headers['Content-Type'] = 'application/json';
+          handler.next(opts);
+        },
+      ),
+    );
+    return dio;
+  }
+
+  String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<DailyStats> getDaily({DateTime? date}) async {
+    final dio = _dio();
+    final qp = (date == null) ? null : {'date': _ymd(date)};
+    final res = await dio.get('/stats/daily', queryParameters: qp);
+    final raw = res.data;
+    final map = raw is String ? jsonDecode(raw) : raw;
+    return DailyStats.fromJson(Map<String, dynamic>.from(map as Map));
+    }
+
+  Future<List<RangePoint>> getRange({required DateTime from, required DateTime to}) async {
+    final dio = _dio();
+    final res = await dio.get('/stats/range', queryParameters: {
+      'from': _ymd(from),
+      'to': _ymd(to),
+    });
+    final raw = res.data;
+    final list = raw is String ? jsonDecode(raw) : raw;
+    return (list as List)
+        .whereType<Map>()
+        .map((e) => RangePoint.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+}
