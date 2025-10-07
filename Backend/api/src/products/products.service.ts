@@ -10,7 +10,7 @@ type DateLike = string | Date | null | undefined;
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   /* ===================== Utils ===================== */
 
@@ -97,6 +97,45 @@ export class ProductsService {
     };
   }
 
+  /* ========= Histórico: evitar duplicado consecutivo ========= */
+
+  /** Grava no histórico apenas se o último registo do utilizador tiver barcode diferente */
+  private async addHistoryIfNotDuplicate(
+    userId: string,
+    snapshot: {
+      barcode: string;
+      nutriScore: string | null;
+      calories: number | null;
+      proteins: Prisma.Decimal | null;
+      carbs: Prisma.Decimal | null;
+      fat: Prisma.Decimal | null;
+    },
+  ) {
+    const last = await this.prisma.productHistory.findFirst({
+      where: { userId },
+      orderBy: { scannedAt: 'desc' },
+      select: { id: true, barcode: true },
+    });
+
+    if (last && last.barcode === snapshot.barcode) {
+      // não cria duplicado consecutivo; idempotente
+      return { skipped: true, id: last.id };
+    }
+
+    const created = await this.prisma.productHistory.create({
+      data: {
+        userId,
+        barcode: snapshot.barcode,
+        nutriScore: (snapshot.nutriScore as any) ?? null,
+        calories: snapshot.calories ?? null,
+        proteins: snapshot.proteins ?? null,
+        carbs: snapshot.carbs ?? null,
+        fat: snapshot.fat ?? null,
+      },
+    });
+    return { skipped: false, id: created.id };
+  }
+
   /* ===================== API ===================== */
 
   // Upsert em Product + grava ProductHistory (se userId vier)
@@ -112,9 +151,9 @@ export class ProductsService {
         // (fix) fallback a partir do histórico quando OFF/cache falham
         const lastHist = userId
           ? await this.prisma.productHistory.findFirst({
-            where: { userId, barcode },
-            orderBy: { scannedAt: 'desc' },
-          })
+              where: { userId, barcode },
+              orderBy: { scannedAt: 'desc' },
+            })
           : null;
 
         if (lastHist) {
@@ -178,16 +217,13 @@ export class ProductsService {
       });
 
       if (userId) {
-        await this.prisma.productHistory.create({
-          data: {
-            userId,
-            barcode: upserted.barcode,
-            nutriScore: upserted.nutriScore ?? null,
-            calories: upserted.energyKcal_100g ?? null,
-            proteins: upserted.proteins_100g ?? null,
-            carbs: upserted.carbs_100g ?? null,
-            fat: upserted.fat_100g ?? null,
-          },
+        await this.addHistoryIfNotDuplicate(userId, {
+          barcode: upserted.barcode,
+          nutriScore: (upserted.nutriScore as any) ?? null,
+          calories: upserted.energyKcal_100g ?? null,
+          proteins: upserted.proteins_100g ?? null,
+          carbs: upserted.carbs_100g ?? null,
+          fat: upserted.fat_100g ?? null,
         });
       }
 
@@ -195,16 +231,13 @@ export class ProductsService {
     }
 
     if (userId) {
-      await this.prisma.productHistory.create({
-        data: {
-          userId,
-          barcode: cached.barcode,
-          nutriScore: cached.nutriScore ?? null,
-          calories: cached.energyKcal_100g ?? null,
-          proteins: cached.proteins_100g ?? null,
-          carbs: cached.carbs_100g ?? null,
-          fat: cached.fat_100g ?? null,
-        },
+      await this.addHistoryIfNotDuplicate(userId, {
+        barcode: cached.barcode,
+        nutriScore: (cached.nutriScore as any) ?? null,
+        calories: cached.energyKcal_100g ?? null,
+        proteins: cached.proteins_100g ?? null,
+        carbs: cached.carbs_100g ?? null,
+        fat: cached.fat_100g ?? null,
       });
     }
 
@@ -233,11 +266,12 @@ export class ProductsService {
     ]);
 
     // 🔥 remove nome vazio / só espaços
-    const clean = items.filter(it => (it.name ?? '').replace(/\s+/g, '').length > 0);
+    const clean = items.filter(
+      (it) => (it.name ?? '').replace(/\s+/g, '').length > 0,
+    );
 
     return { items: clean, total, page, pageSize };
   }
-
 
   // ------------ Sugestões locais (rápidas) ------------
   async suggestLocal(q: string, limit = 8) {
@@ -259,7 +293,9 @@ export class ProductsService {
     ]);
 
     //remove nome vazio / só espaços
-    const clean = items.filter(it => (it.name ?? '').replace(/\s+/g, '').length > 0);
+    const clean = items.filter(
+      (it) => (it.name ?? '').replace(/\s+/g, '').length > 0,
+    );
 
     return { items: clean, total };
   }
@@ -270,7 +306,7 @@ export class ProductsService {
 
     // 🔥 só produtos com código e nome “real”
     const valid = off.products.filter(
-      (p) => !!p.code && ((p.product_name ?? '').replace(/\s+/g, '').length > 0),
+      (p) => !!p.code && (p.product_name ?? '').replace(/\s+/g, '').length > 0,
     );
 
     const upserts = valid.map((p) => {
@@ -295,7 +331,9 @@ export class ProductsService {
     });
 
     // 🔥 remove nome vazio / só espaços
-    const clean = items.filter(it => (it.name ?? '').replace(/\s+/g, '').length > 0);
+    const clean = items.filter(
+      (it) => (it.name ?? '').replace(/\s+/g, '').length > 0,
+    );
 
     return {
       items: clean,
@@ -305,7 +343,6 @@ export class ProductsService {
       source: 'OFF+cache',
     };
   }
-
 
   // ------------ Pesquisa híbrida (local + enrichment async) ------------
   async searchHybrid(q: string, page = 1, pageSize = 20) {
@@ -323,7 +360,7 @@ export class ProductsService {
         });
       });
       if (upserts.length) {
-        this.prisma.$transaction(upserts).catch(() => { });
+        this.prisma.$transaction(upserts).catch(() => {});
       }
     } catch {
       // ignora erros da OFF
@@ -388,7 +425,10 @@ export class ProductsService {
       this.replaceBigInts({
         ...r,
         // Garantia explícita no id (caso não uses o replaceBigInts noutro contexto)
-        id: typeof (r as any).id === 'bigint' ? (r as any).id.toString() : (r as any).id,
+        id:
+          typeof (r as any).id === 'bigint'
+            ? (r as any).id.toString()
+            : (r as any).id,
       }),
     );
 
