@@ -2,8 +2,8 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 
-import 'auth_api.dart';       // -> AuthApi.baseUrl
-import 'auth_storage.dart';   // -> AuthStorage.I.readAccessToken()
+import 'auth_api.dart'; // -> AuthApi.baseUrl
+import 'auth_storage.dart'; // -> AuthStorage.I.readAccessToken()
 
 class DailyTotals {
   final int kcal;
@@ -33,6 +33,23 @@ class DailyTotals {
         fiberG: (j['fiber_g'] ?? 0) * 1.0,
         saltG: (j['salt_g'] ?? 0) * 1.0,
       );
+
+  /// Helper para construir a partir do formato novo `{macros, consumedKcal}`.
+  factory DailyTotals.fromNewShape({
+    required int consumedKcal,
+    required Map<String, dynamic> macros,
+  }) {
+    num _n(dynamic v) => (v ?? 0) * 1.0;
+    return DailyTotals(
+      kcal: consumedKcal,
+      proteinG: _n(macros['protein']),
+      carbG: _n(macros['carb']),
+      fatG: _n(macros['fat']),
+      sugarsG: _n(macros['sugars']),
+      fiberG: _n(macros['fiber']),
+      saltG: _n(macros['salt']),
+    );
+  }
 }
 
 class MacroProgress {
@@ -73,6 +90,10 @@ class DailyGoals {
       fatG: j['fat_g'] != null ? (j['fat_g'] as num) * 1.0 : null,
     );
   }
+
+  /// Helper para construir a partir do formato novo `{goalKcal}`.
+  factory DailyGoals.fromNewShape({int? goalKcal}) =>
+      DailyGoals(kcal: goalKcal, proteinG: null, carbG: null, fatG: null);
 }
 
 class DailyStats {
@@ -84,6 +105,9 @@ class DailyStats {
   final MacroProgress? carb;
   final MacroProgress? fat;
 
+  /// Extra: mapa byMeal (kcal/macros por refeição).
+  final Map<String, dynamic>? byMealRaw;
+
   const DailyStats({
     required this.date,
     required this.totals,
@@ -92,21 +116,73 @@ class DailyStats {
     this.protein,
     this.carb,
     this.fat,
+    this.byMealRaw,
   });
 
   factory DailyStats.fromJson(Map<String, dynamic> j) {
-    DateTime parseDate(String s) =>
-        s.contains('T') ? DateTime.parse(s).toLocal() : DateTime.parse('${s}T00:00:00').toLocal();
+    DateTime parseDate(String s) => s.contains('T')
+        ? DateTime.parse(s).toLocal()
+        : DateTime.parse('${s}T00:00:00').toLocal();
 
-    final progress = (j['progress'] is Map) ? Map<String, dynamic>.from(j['progress']) : const {};
+    // ====== DETEÇÃO DO FORMATO ======
+    final isOldShape = j.containsKey('totals') || j.containsKey('progress');
+    if (isOldShape) {
+      final progress = (j['progress'] is Map)
+          ? Map<String, dynamic>.from(j['progress'])
+          : const {};
+      return DailyStats(
+        date: parseDate(
+          j['date']?.toString() ?? DateTime.now().toIso8601String(),
+        ),
+        totals: DailyTotals.fromJson(
+          Map<String, dynamic>.from(j['totals'] ?? {}),
+        ),
+        goals: DailyGoals.fromJson(
+          j['goals'] is Map ? Map<String, dynamic>.from(j['goals']) : null,
+        ),
+        kcal: progress['kcal'] is Map
+            ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['kcal']))
+            : null,
+        protein: progress['protein_g'] is Map
+            ? MacroProgress.fromJson(
+                Map<String, dynamic>.from(progress['protein_g']),
+              )
+            : null,
+        carb: progress['carb_g'] is Map
+            ? MacroProgress.fromJson(
+                Map<String, dynamic>.from(progress['carb_g']),
+              )
+            : null,
+        fat: progress['fat_g'] is Map
+            ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['fat_g']))
+            : null,
+        // >>> FIX: preservar byMeal também no formato antigo
+        byMealRaw:
+            j['byMeal'] is Map ? Map<String, dynamic>.from(j['byMeal']) : null,
+      );
+    }
+
+    // ====== FORMATO NOVO ======
+    final consumed = (j['consumedKcal'] ?? 0) as int;
+    final macros = Map<String, dynamic>.from(j['macros'] ?? const {});
+    final goalKcal =
+        (j['goalKcal'] is num) ? (j['goalKcal'] as num).toInt() : null;
+
     return DailyStats(
-      date: parseDate(j['date']?.toString() ?? DateTime.now().toIso8601String()),
-      totals: DailyTotals.fromJson(Map<String, dynamic>.from(j['totals'] ?? {})),
-      goals: DailyGoals.fromJson(j['goals'] is Map ? Map<String, dynamic>.from(j['goals']) : null),
-      kcal: progress['kcal'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['kcal'])) : null,
-      protein: progress['protein_g'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['protein_g'])) : null,
-      carb: progress['carb_g'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['carb_g'])) : null,
-      fat: progress['fat_g'] is Map ? MacroProgress.fromJson(Map<String, dynamic>.from(progress['fat_g'])) : null,
+      date: parseDate(
+        j['date']?.toString() ?? DateTime.now().toIso8601String(),
+      ),
+      totals: DailyTotals.fromNewShape(
+        consumedKcal: consumed,
+        macros: macros,
+      ),
+      goals: DailyGoals.fromNewShape(goalKcal: goalKcal),
+      kcal: null,
+      protein: null,
+      carb: null,
+      fat: null,
+      byMealRaw:
+          j['byMeal'] is Map ? Map<String, dynamic>.from(j['byMeal']) : null,
     );
   }
 }
@@ -128,10 +204,10 @@ class RangePoint {
 
   factory RangePoint.fromJson(Map<String, dynamic> j) => RangePoint(
         date: DateTime.parse('${j['date']}T00:00:00').toLocal(),
-        kcal: (j['kcal'] ?? 0) as int,
-        proteinG: (j['protein_g'] ?? 0) * 1.0,
-        carbG: (j['carb_g'] ?? 0) * 1.0,
-        fatG: (j['fat_g'] ?? 0) * 1.0,
+        kcal: (j['kcal'] ?? j['consumedKcal'] ?? 0) as int,
+        proteinG: (j['protein_g'] ?? (j['macros']?['protein'] ?? 0)) * 1.0,
+        carbG: (j['carb_g'] ?? (j['macros']?['carb'] ?? 0)) * 1.0,
+        fatG: (j['fat_g'] ?? (j['macros']?['fat'] ?? 0)) * 1.0,
       );
 }
 
@@ -166,19 +242,103 @@ class StatsApi {
     final raw = res.data;
     final map = raw is String ? jsonDecode(raw) : raw;
     return DailyStats.fromJson(Map<String, dynamic>.from(map as Map));
-    }
+  }
 
-  Future<List<RangePoint>> getRange({required DateTime from, required DateTime to}) async {
+  Future<List<RangePoint>> getRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
     final dio = _dio();
-    final res = await dio.get('/stats/range', queryParameters: {
-      'from': _ymd(from),
-      'to': _ymd(to),
-    });
+    final res = await dio.get(
+      '/stats/range',
+      queryParameters: {'from': _ymd(from), 'to': _ymd(to)},
+    );
     final raw = res.data;
-    final list = raw is String ? jsonDecode(raw) : raw;
-    return (list as List)
-        .whereType<Map>()
-        .map((e) => RangePoint.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    final parsed = raw is String ? jsonDecode(raw) : raw;
+
+    // Aceita ambos: [ ... ] (antigo) ou { days: [...] } (novo)
+    if (parsed is List) {
+      return parsed
+          .whereType<Map>()
+          .map((e) => RangePoint.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    if (parsed is Map && parsed['days'] is List) {
+      final list = (parsed['days'] as List);
+      return list
+          .whereType<Map>()
+          .map((e) => RangePoint.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    throw Exception('Formato inesperado em /stats/range');
+  }
+}
+
+// ---------------- /stats/recommended ----------------
+
+class RecommendedTargets {
+  final int kcal;
+  final num proteinG;
+  final num carbG;
+  final num fatG;
+  final num sugarsGMax;
+  final num fiberG;
+  final num saltGMax;
+  final num satFatGMax;
+
+  RecommendedTargets({
+    required this.kcal,
+    required this.proteinG,
+    required this.carbG,
+    required this.fatG,
+    required this.sugarsGMax,
+    required this.fiberG,
+    required this.saltGMax,
+    required this.satFatGMax,
+  });
+
+  factory RecommendedTargets.fromJson(Map<String, dynamic> j) =>
+      RecommendedTargets(
+        kcal: (j['kcal'] ?? 0) as int,
+        proteinG: (j['protein_g'] ?? 0) * 1.0,
+        carbG: (j['carb_g'] ?? 0) * 1.0,
+        fatG: (j['fat_g'] ?? 0) * 1.0,
+        sugarsGMax: (j['sugars_g_max'] ?? 0) * 1.0,
+        fiberG: (j['fiber_g'] ?? 0) * 1.0,
+        saltGMax: (j['salt_g_max'] ?? 0) * 1.0,
+        satFatGMax: (j['satFat_g_max'] ?? 0) * 1.0,
+      );
+}
+
+class RecommendedResponse {
+  final RecommendedTargets targets;
+  final Map<String, dynamic> macrosPercent; // {protein, carb, fat}
+  final Map<String, dynamic> preferences; // {lowSalt, lowSugar, ...}
+
+  RecommendedResponse({
+    required this.targets,
+    required this.macrosPercent,
+    required this.preferences,
+  });
+
+  factory RecommendedResponse.fromJson(Map<String, dynamic> j) =>
+      RecommendedResponse(
+        targets: RecommendedTargets.fromJson(
+          Map<String, dynamic>.from(j['targets'] ?? {}),
+        ),
+        macrosPercent:
+            Map<String, dynamic>.from(j['macros_percent'] ?? const {}),
+        preferences:
+            Map<String, dynamic>.from(j['preferences'] ?? const {}),
+      );
+}
+
+extension StatsApiRecommended on StatsApi {
+  Future<RecommendedResponse> getRecommended() async {
+    final dio = _dio();
+    final res = await dio.get('/stats/recommended');
+    final raw = res.data;
+    final map = raw is String ? jsonDecode(raw) : raw;
+    return RecommendedResponse.fromJson(Map<String, dynamic>.from(map as Map));
   }
 }
