@@ -1,59 +1,47 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Query,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
-import { Request } from 'express';
+// src/stats/stats.controller.ts
+import { Controller, Get, Query, UseGuards, Req } from '@nestjs/common';
 import { StatsService } from './stats.service';
+import { DailyDto } from './dto/daily.dto';
+import { RangeDto } from './dto/range.dto';
+import { DayNutrientsDto } from './dto/day-nutrients.dto';
 import { AccessTokenGuard } from '../auth/auth.guards';
-
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+import { Request } from 'express';
 
 @UseGuards(AccessTokenGuard)
 @Controller('stats')
 export class StatsController {
-  constructor(private readonly stats: StatsService) { }
+  constructor(private readonly stats: StatsService) {}
 
   @Get('daily')
-  async daily(@Req() req: Request, @Query('date') date?: string) {
-    const user = (req as any).user;
-    const userId = user?.sub ?? user?.id;
-    if (!userId) throw new BadRequestException('Utilizador inválido.');
-
-    if (date && !ISO_DAY.test(date)) {
-      throw new BadRequestException("Formato inválido para 'date' (YYYY-MM-DD).");
-    }
-
-    return this.stats.getDaily(userId, date);
+  async daily(@Query() dto: DailyDto, @Req() req: Request) {
+    const userId = (req.user as any)?.sub as string;
+    return this.stats.getDaily({
+      userId,
+      dateISO: dto.date ?? this.stats.todayISO(),
+    });
   }
 
   @Get('range')
-  async range(
-    @Req() req: Request,
-    @Query('from') from: string,
-    @Query('to') to: string,
-  ) {
-    if (!from || !to) {
-      throw new BadRequestException("Query 'from' e 'to' são obrigatórios (YYYY-MM-DD).");
-    }
-    if (!ISO_DAY.test(from) || !ISO_DAY.test(to)) {
-      throw new BadRequestException("Formato inválido (usar YYYY-MM-DD).");
-    }
-
-    const user = (req as any).user;
-    const userId = user?.sub ?? user?.id;
-    if (!userId) throw new BadRequestException('Utilizador inválido.');
-
-    return this.stats.getRange(userId, from, to);
+  async range(@Query() dto: RangeDto, @Req() req: Request) {
+    const userId = (req.user as any)?.sub as string;
+    return this.stats.getRange({
+      userId,
+      fromISO: dto.from,
+      toISO: dto.to,
+    });
   }
-  @Get('recommended')
-  async recommended(@Req() req: Request) {
-    const user = (req as any).user;
-    const userId = user?.sub ?? user?.id;
-    if (!userId) throw new BadRequestException('Utilizador inválido.');
-    return this.stats.getRecommended(userId);
+
+  @Get('day-nutrients')
+  async dayNutrients(@Query() dto: DayNutrientsDto, @Req() req: Request) {
+    const userId = (req.user as any)?.sub as string;
+    const dateISO = dto.date ?? this.stats.todayISO();
+    const day = await this.stats.getDaily({ userId, dateISO });
+    // reduz a payload para o card de macros/calorias
+    return {
+      date: day.date,
+      goalKcal: day.goalKcal,
+      consumedKcal: day.consumedKcal,
+      macros: day.macros,
+    };
   }
 }
