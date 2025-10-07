@@ -148,11 +148,11 @@ class _NutritionScreenState extends State<NutritionScreen> {
       backgroundColor: cs.surface,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
+        backgroundColor: cs.primary,
+        foregroundColor: cs.onPrimary,
         title: Text(
           "Diário das Calorias",
-          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.white,),
         ),
         actions: [
           if (_loading)
