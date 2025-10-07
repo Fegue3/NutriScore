@@ -314,3 +314,22 @@ model MealItem {
   User     User?   @relation(fields: [userId], references: [id])
   userId   String?
 }
+
+model DailyStats {
+  userId String
+  date   DateTime   // 00:00 UTC (mesmo canónico das Meals)
+  // totais do dia (somatório de MealItem caches)
+  kcal    Int        @default(0)
+  protein Decimal    @db.Decimal(10,2) @default(0)
+  carb    Decimal    @db.Decimal(10,2) @default(0)
+  fat     Decimal    @db.Decimal(10,2) @default(0)
+  sugars  Decimal    @db.Decimal(10,2) @default(0)
+  fiber   Decimal    @db.Decimal(10,2) @default(0)
+  salt    Decimal    @db.Decimal(10,2) @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, date])
+  @@index([userId, date])
+}
