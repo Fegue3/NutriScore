@@ -15,24 +15,39 @@ class MacroSectionCard extends StatelessWidget {
     required this.sugarsG,
     required this.fiberG,
     required this.saltG,
+
+    // Metas / limites recomendados (podem vir a null)
+    this.sugarsTargetG,
+    this.fiberTargetG,
+    this.saltTargetG,
   });
 
   final int kcalUsed;
   final int kcalTarget;
+
   final double proteinG;
   final double proteinTargetG;
+
   final double carbG;
   final double carbTargetG;
+
   final double fatG;
   final double fatTargetG;
+
   final double sugarsG;
   final double fiberG;
   final double saltG;
 
-  // fallback para quando a meta não existe/é 0
-  num _fallbackTarget(double used, double target) {
-    if (target > 0) return target;
-    return used > 0 ? used : 1; // evita 0/0
+  // Recomendações
+  final double? sugarsTargetG;
+  final double? fiberTargetG;
+  final double? saltTargetG;
+
+  // evita 0/0 e mantém a barra visível
+  num _nonZeroTarget(num? target, double used) {
+    final t = (target ?? 0).toDouble();
+    if (t > 0) return t;
+    return used > 0 ? used : 1;
   }
 
   @override
@@ -41,8 +56,12 @@ class MacroSectionCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     // neutros
-    final neutralFill = cs.outlineVariant;            // cinza da barra
-    final neutralTrack = cs.surfaceContainerHighest;  // track
+    final neutralFill = cs.outlineVariant;
+    final neutralTrack = cs.surfaceContainerHighest;
+
+    final sugarsT = _nonZeroTarget(sugarsTargetG, sugarsG);
+    final fiberT  = _nonZeroTarget(fiberTargetG,  fiberG);
+    final saltT   = _nonZeroTarget(saltTargetG,   saltG);
 
     return Container(
       decoration: BoxDecoration(
@@ -63,8 +82,7 @@ class MacroSectionCard extends StatelessWidget {
           // Cabeçalho
           Row(
             children: [
-              Text('Hoje',
-                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Calorias', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -83,12 +101,12 @@ class MacroSectionCard extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(color: cs.surfaceContainerHighest, height: 1),
 
-          // Macros principais — cores próprias + animação lenta
+          // Macros principais — com metas
           MacroProgressBar(
             label: 'Proteína',
             unit: ' g',
             used: proteinG,
-            target: _fallbackTarget(proteinG, proteinTargetG),
+            target: _nonZeroTarget(proteinTargetG, proteinG),
             color: cs.primary, // Fresh Green
             backgroundColor: cs.surfaceContainerHighest,
             duration: const Duration(milliseconds: 1800),
@@ -98,7 +116,7 @@ class MacroSectionCard extends StatelessWidget {
             label: 'Hidratos',
             unit: ' g',
             used: carbG,
-            target: _fallbackTarget(carbG, carbTargetG),
+            target: _nonZeroTarget(carbTargetG, carbG),
             color: cs.secondary, // Warm Tangerine
             backgroundColor: cs.surfaceContainerHighest,
             duration: const Duration(milliseconds: 1800),
@@ -108,7 +126,7 @@ class MacroSectionCard extends StatelessWidget {
             label: 'Gordura',
             unit: ' g',
             used: fatG,
-            target: _fallbackTarget(fatG, fatTargetG),
+            target: _nonZeroTarget(fatTargetG, fatG),
             color: cs.error, // Ripe Red
             backgroundColor: cs.surfaceContainerHighest,
             duration: const Duration(milliseconds: 1800),
@@ -118,12 +136,12 @@ class MacroSectionCard extends StatelessWidget {
           const SizedBox(height: 8),
           Divider(color: cs.surfaceContainerHighest, height: 1),
 
-          // Nutrientes extra — cinza + barra sempre visível (fallback)
+          // Nutrientes extra — com limites recomendados reais
           MacroProgressBar(
             label: 'Açúcar',
             unit: ' g',
             used: sugarsG,
-            target: _fallbackTarget(sugarsG, 0),
+            target: sugarsT,
             color: neutralFill,
             backgroundColor: neutralTrack,
             duration: const Duration(milliseconds: 1600),
@@ -133,7 +151,7 @@ class MacroSectionCard extends StatelessWidget {
             label: 'Fibra',
             unit: ' g',
             used: fiberG,
-            target: _fallbackTarget(fiberG, 0),
+            target: fiberT,
             color: neutralFill,
             backgroundColor: neutralTrack,
             duration: const Duration(milliseconds: 1600),
@@ -143,7 +161,7 @@ class MacroSectionCard extends StatelessWidget {
             label: 'Sal',
             unit: ' g',
             used: saltG,
-            target: _fallbackTarget(saltG, 0),
+            target: saltT,
             color: neutralFill,
             backgroundColor: neutralTrack,
             duration: const Duration(milliseconds: 2200),
