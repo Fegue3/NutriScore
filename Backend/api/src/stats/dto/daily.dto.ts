@@ -1,7 +1,11 @@
-import { IsDateString, IsOptional } from 'class-validator';
+// src/stats/dto/daily.dto.ts
+import { IsOptional, IsDateString } from 'class-validator';
 
-export class DailyQueryDto {
+export class DailyDto {
+  /**
+   * Data canónica (YYYY-MM-DD). Se omitido, assume hoje (UTC 00:00).
+   */
   @IsOptional()
   @IsDateString()
-  date?: string; // YYYY-MM-DD (opcional -> hoje por defeito)
+  date?: string;
 }

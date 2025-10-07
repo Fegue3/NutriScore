@@ -1,9 +1,8 @@
-import { IsDateString, IsOptional } from 'class-validator';
+// src/stats/dto/day-nutrients.dto.ts
+import { IsOptional, IsDateString } from 'class-validator';
 
-export class DayNutrientsQueryDto {
-  @IsDateString()
-  date!: string; // YYYY-MM-DD (dia do utilizador, mas normalizamos a UTC 00:00)
-
+export class DayNutrientsDto {
   @IsOptional()
-  tz?: string; // ex: 'Europe/Lisbon' (opcional, se quiseres tratar TZ depois)
+  @IsDateString()
+  date?: string;
 }
