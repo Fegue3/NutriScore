@@ -322,37 +322,36 @@ class _NutritionScreenState extends State<NutritionScreen> {
     );
   }
 
-void _openEntry(MealEntry e) {
-  // label da quantidade exatamente como o user registou
-  String? baseLabel;
-  if (e.quantityGrams != null) {
-    baseLabel = '${e.quantityGrams!.round()} g';
-  } else if (e.quantityMl != null) {
-    baseLabel = '${e.quantityMl!.round()} ml';
-  } else if (e.servings != null) {
-    baseLabel = (e.servings! % 1 == 0)
-        ? '${e.servings!.toInt()} porção'
-        : '${e.servings!.toStringAsFixed(1)} porções';
+  void _openEntry(MealEntry e) {
+    // label da quantidade exatamente como o user registou
+    String? baseLabel;
+    if (e.quantityGrams != null) {
+      baseLabel = '${e.quantityGrams!.round()} g';
+    } else if (e.quantityMl != null) {
+      baseLabel = '${e.quantityMl!.round()} ml';
+    } else if (e.servings != null) {
+      baseLabel = (e.servings! % 1 == 0)
+          ? '${e.servings!.toInt()} porção'
+          : '${e.servings!.toStringAsFixed(1)} porções';
+    }
+
+    // Abre em readOnly com os valores registados pelo user
+    context.pushNamed(
+      'productDetail',
+      extra: {
+        'barcode': e.barcode, // se houver
+        'readOnly': true,
+        'name': e.name,
+        'brand': e.brand,
+        'baseQuantityLabel': baseLabel ?? '1 porção',
+        'kcalPerBase': (e.calories ?? 0).round(),
+        'proteinGPerBase': e.protein, // estes existem no teu modelo
+        'carbsGPerBase': e.carbs,
+        'fatGPerBase': e.fat,
+        'freezeFromEntry': true, // sinal para não sobrescrever no fetch
+      },
+    );
   }
-
-  // Abre em readOnly com os valores registados pelo user
-  context.pushNamed(
-    'productDetail',
-    extra: {
-      'barcode': e.barcode,        // se houver
-      'readOnly': true,
-      'name': e.name,
-      'brand': e.brand,
-      'baseQuantityLabel': baseLabel ?? '1 porção',
-      'kcalPerBase': (e.calories ?? 0).round(),
-      'proteinGPerBase': e.protein, // estes existem no teu modelo
-      'carbsGPerBase': e.carbs,
-      'fatGPerBase': e.fat,
-      'freezeFromEntry': true,     // sinal para não sobrescrever no fetch
-    },
-  );
-}
-
 }
 
 /* ============================ AUXILIARES ============================ */
@@ -455,7 +454,9 @@ class _DayContent extends StatelessWidget {
           const SizedBox(height: 16),
           const _WaterCard(),
           const SizedBox(height: 24),
-          const _BottomActions(),
+          _BottomActions(
+            onOpenNutrition: () => context.push('/nutrition/stats'),
+          ),
         ],
       ),
     );
@@ -1252,7 +1253,8 @@ class _CustomAmountResult {
 }
 
 class _BottomActions extends StatelessWidget {
-  const _BottomActions();
+  final VoidCallback? onOpenNutrition;
+  const _BottomActions({this.onOpenNutrition});
 
   @override
   Widget build(BuildContext context) {
@@ -1265,20 +1267,22 @@ class _BottomActions extends StatelessWidget {
     return Column(
       children: [
         Row(
-          children: const [
+          children: [
             Expanded(
               child: _TonalPill(
                 icon: Icons.pie_chart_outline_rounded,
                 label: "Nutrição",
+                onTap: onOpenNutrition, // <-- chama o callback
               ),
             ),
-            SizedBox(width: 12),
-            Expanded(
+            const SizedBox(width: 12),
+            const Expanded(
               child: _TonalPill(icon: Icons.note_alt_outlined, label: "Notas"),
             ),
           ],
         ),
         const SizedBox(height: 14),
+        // ... resto inalterado
         DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
@@ -1323,7 +1327,8 @@ class _BottomActions extends StatelessWidget {
 class _TonalPill extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _TonalPill({required this.icon, required this.label});
+  final VoidCallback? onTap;
+  const _TonalPill({required this.icon, required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1345,7 +1350,7 @@ class _TonalPill extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(28),
-        onTap: () {},
+        onTap: onTap, // <-- agora usa o callback
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1364,3 +1369,4 @@ class _TonalPill extends StatelessWidget {
     );
   }
 }
+
