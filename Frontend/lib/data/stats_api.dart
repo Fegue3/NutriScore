@@ -281,64 +281,95 @@ class RecommendedTargets {
   final num proteinG;
   final num carbG;
   final num fatG;
-  final num sugarsGMax;
   final num fiberG;
-  final num saltGMax;
-  final num satFatGMax;
+  final num sugarsGMax; // limite diário recomendado
+  final num saltGMax;   // limite diário recomendado
+  final num satFatGMax; // limite diário recomendado
 
-  RecommendedTargets({
+  const RecommendedTargets({
     required this.kcal,
     required this.proteinG,
     required this.carbG,
     required this.fatG,
-    required this.sugarsGMax,
     required this.fiberG,
+    required this.sugarsGMax,
     required this.saltGMax,
     required this.satFatGMax,
   });
 
-  factory RecommendedTargets.fromJson(Map<String, dynamic> j) =>
-      RecommendedTargets(
-        kcal: (j['kcal'] ?? 0) as int,
-        proteinG: (j['protein_g'] ?? 0) * 1.0,
-        carbG: (j['carb_g'] ?? 0) * 1.0,
-        fatG: (j['fat_g'] ?? 0) * 1.0,
-        sugarsGMax: (j['sugars_g_max'] ?? 0) * 1.0,
-        fiberG: (j['fiber_g'] ?? 0) * 1.0,
-        saltGMax: (j['salt_g_max'] ?? 0) * 1.0,
-        satFatGMax: (j['satFat_g_max'] ?? 0) * 1.0,
-      );
+  static num _d(dynamic v) =>
+      (v is num) ? v.toDouble() : num.tryParse('$v') ?? 0;
+
+  static int _i(dynamic v) =>
+      (v is int) ? v : (v is num) ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  /// Aceita várias variantes de chaves para robustez:
+  /// - sugars: sugars_g_max | sugars_g
+  /// - salt:   salt_g_max   | salt_g
+  /// - sat fat: sat_fat_g_max | satFat_g_max | satFatGMax
+  factory RecommendedTargets.fromTargetsMap(Map<String, dynamic> t) {
+    return RecommendedTargets(
+      kcal: _i(t['kcal']),
+      proteinG: _d(t['protein_g'] ?? t['proteinG']),
+      carbG:    _d(t['carb_g']    ?? t['carbG']),
+      fatG:     _d(t['fat_g']     ?? t['fatG']),
+      fiberG:   _d(t['fiber_g']   ?? t['fiberG']),
+      sugarsGMax: _d(t['sugars_g_max'] ?? t['sugars_g'] ?? t['sugarsGMax'] ?? t['sugarsG']),
+      saltGMax:   _d(t['salt_g_max']   ?? t['salt_g']   ?? t['saltGMax']   ?? t['saltG']),
+      satFatGMax: _d(t['sat_fat_g_max'] ?? t['satFat_g_max'] ?? t['satFatGMax'] ?? 0),
+    );
+  }
 }
 
 class RecommendedResponse {
   final RecommendedTargets targets;
-  final Map<String, dynamic> macrosPercent; // {protein, carb, fat}
-  final Map<String, dynamic> preferences; // {lowSalt, lowSugar, ...}
+  final Map<String, dynamic> macrosPercent; // {protein, carb, fat} se o backend enviar
+  final Map<String, dynamic> preferences;   // {lowSalt, lowSugar, ...} se existir
 
-  RecommendedResponse({
+  const RecommendedResponse({
     required this.targets,
     required this.macrosPercent,
     required this.preferences,
   });
 
-  factory RecommendedResponse.fromJson(Map<String, dynamic> j) =>
-      RecommendedResponse(
-        targets: RecommendedTargets.fromJson(
-          Map<String, dynamic>.from(j['targets'] ?? {}),
-        ),
-        macrosPercent:
-            Map<String, dynamic>.from(j['macros_percent'] ?? const {}),
-        preferences:
-            Map<String, dynamic>.from(j['preferences'] ?? const {}),
-      );
+  factory RecommendedResponse.fromJson(Map<String, dynamic> j) {
+    final targetsRaw = (j['targets'] is Map)
+        ? Map<String, dynamic>.from(j['targets'])
+        : (j); // também aceita quando o backend já devolve só o objeto de targets
+    return RecommendedResponse(
+      targets: RecommendedTargets.fromTargetsMap(targetsRaw),
+      macrosPercent: Map<String, dynamic>.from(j['macros_percent'] ?? const {}),
+      preferences:   Map<String, dynamic>.from(j['preferences']    ?? const {}),
+    );
+  }
 }
 
 extension StatsApiRecommended on StatsApi {
+  /// NOVO: usa /stats/recommended e NÃO /stats/day-nutrients.
+  /// Retorna RecommendedResponse (com .targets para kcal e metas todas).
   Future<RecommendedResponse> getRecommended() async {
     final dio = _dio();
     final res = await dio.get('/stats/recommended');
     final raw = res.data;
-    final map = raw is String ? jsonDecode(raw) : raw;
-    return RecommendedResponse.fromJson(Map<String, dynamic>.from(map as Map));
+    final j = raw is String ? jsonDecode(raw) : raw;
+
+    // Aceita:
+    // - { targets: {...}, macros_percent: {...}, preferences: {...} }
+    // - {...} diretamente com as chaves dos targets
+    if (j is Map<String, dynamic>) {
+      if (j.containsKey('targets')) {
+        return RecommendedResponse.fromJson(j);
+      } else {
+        // backend a devolver só o objeto de alvos
+        return RecommendedResponse.fromJson({'targets': j});
+      }
+    }
+    throw Exception('Formato inesperado em /stats/recommended');
+  }
+
+  /// Atalho: devolve só os targets (kcal + metas) já normalizados.
+  Future<RecommendedTargets> getRecommendedTargets() async {
+    final r = await getRecommended();
+    return r.targets;
   }
 }
