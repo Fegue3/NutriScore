@@ -1015,8 +1015,8 @@ class _WaterCardState extends State<_WaterCard> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 14,
-            offset: Offset(0, 6),
+            blurRadius: 6,
+            offset: Offset(0, 3),
             color: Color(0x14000000),
           ),
         ],
