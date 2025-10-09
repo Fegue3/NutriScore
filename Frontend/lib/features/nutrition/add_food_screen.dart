@@ -16,6 +16,9 @@ class AddFoodScreen extends StatefulWidget {
   State<AddFoodScreen> createState() => _AddFoodScreenState();
 }
 
+// --- Tabs do AddFood ---
+enum _AddTab { history, favorites, results }
+
 class _AddFoodScreenState extends State<AddFoodScreen> {
   final _searchCtrl = TextEditingController();
   late MealType _selectedMeal;
@@ -31,6 +34,11 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   bool _loadingHistory = false;
   List<ProductHistoryItem> _history = const [];
 
+  // ---- FAVORITOS ----
+  _AddTab _tab = _AddTab.history;
+  bool _loadingFavs = false;
+  List<ProductFavoriteItem> _favorites = const [];
+
   @override
   void initState() {
     super.initState();
@@ -40,7 +48,10 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
     // Sugestões rápidas enquanto escreve
     _searchCtrl.addListener(() async {
       final q = _searchCtrl.text.trim();
-      setState(() => _showPesquisa = q.isNotEmpty);
+      setState(() {
+        _showPesquisa = q.isNotEmpty;
+        _tab = q.isNotEmpty ? _AddTab.results : _tab;
+      });
       if (q.isEmpty) {
         setState(() => _results = const []);
         return;
@@ -49,9 +60,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
         final items = await ProductsApi.I.suggest(q, limit: 8);
         if (!mounted) return;
         setState(() => _results = items);
-      } catch (_) {
-        // silencioso
-      }
+      } catch (_) {}
     });
   }
 
@@ -74,6 +83,37 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
       ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
+  Future<void> _fetchFavorites() async {
+    setState(() => _loadingFavs = true);
+    try {
+      final resp = await ProductsApi.I.getFavorites(page: 1, pageSize: 20);
+
+      final List<ProductFavoriteItem> items = (resp.items as List)
+          .map<ProductFavoriteItem>((e) {
+            if (e is ProductFavoriteItem) return e;
+            final s = e as ProductSummary; // adapta se o teu tipo for outro
+            return ProductFavoriteItem(
+              barcode: s.barcode,
+              name: s.name,
+              brand: s.brand,
+              nutriScore: s.nutriScore,
+              energyKcal100g: s.energyKcal100g,
+              createdAt: null,
+            );
+          })
+          .toList(growable: false);
+
+      setState(() => _favorites = items);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _loadingFavs = false);
     }
   }
 
@@ -116,7 +156,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
         "kcalPerBase": it.energyKcal100g ?? 0,
         "nutriScore": it.nutriScore,
         "initialMeal": _selectedMeal.labelPt,
-        "date":  widget.selectedDate,
+        "date": widget.selectedDate,
       },
     );
     if (!mounted) return;
@@ -129,7 +169,11 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
     if (barcode != null && barcode.isNotEmpty) {
       await context.pushNamed(
         'productDetail',
-        extra: {"barcode": barcode, "initialMeal": _selectedMeal.labelPt, "date": day,},
+        extra: {
+          "barcode": barcode,
+          "initialMeal": _selectedMeal.labelPt,
+          "date": day,
+        },
       );
     } else {
       final p = h.product;
@@ -239,8 +283,13 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
             Expanded(
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                itemCount:
-                    (showingResults ? _results.length : _history.length) + 1,
+                itemCount: (() {
+                  if (_showPesquisa || _tab == _AddTab.results)
+                    return _results.length + 1;
+                  if (_tab == _AddTab.favorites) return _favorites.length + 1;
+                  return _history.length + 1;
+                })(),
+
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   if (i == 0) {
@@ -248,20 +297,71 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                       padding: const EdgeInsets.only(top: 4, bottom: 8),
                       child: Row(
                         children: [
+                          // ====== CENTRADO ======
                           Expanded(
-                            child: Text(
-                              showingResults ? "Pesquisa" : "Histórico",
-                              style: tt.titleMedium?.copyWith(
-                                color: cs.onSurface,
-                                fontWeight: FontWeight.w800,
+                            child: Center(
+                              child: Wrap(
+                                alignment: WrapAlignment
+                                    .center, // <-- centra horizontalmente
+                                runAlignment: WrapAlignment
+                                    .center, // <-- se quebrar linha, mantém centrado
+                                spacing: 8,
+                                children: [
+                                  _HeaderTabChip(
+                                    label: 'Histórico',
+                                    selected:
+                                        _tab == _AddTab.history &&
+                                        !_showPesquisa,
+                                    onTap: () {
+                                      setState(() {
+                                        _tab = _AddTab.history;
+                                        _showPesquisa = false;
+                                      });
+                                      _fetchHistory();
+                                    },
+                                  ),
+                                  _HeaderTabChip(
+                                    label: 'Favoritos',
+                                    selected:
+                                        _tab == _AddTab.favorites &&
+                                        !_showPesquisa,
+                                    onTap: () {
+                                      setState(() {
+                                        _tab = _AddTab.favorites;
+                                        _showPesquisa = false;
+                                      });
+                                      _fetchFavorites();
+                                    },
+                                  ),
+
+                                  // (opcional – preparado para o futuro)
+                                  // _HeaderTabChip(
+                                  //   label: 'Personalizados',
+                                  //   selected: _tab == _AddTab.custom && !_showPesquisa,
+                                  //   onTap: () {
+                                  //     setState(() { _tab = _AddTab.custom; _showPesquisa = false; });
+                                  //     _fetchCustomMeals(); // quando tiveres
+                                  //   },
+                                  // ),
+                                ],
                               ),
                             ),
                           ),
-                          if (!showingResults)
+
+                          // Refresh mantém-se à direita
+                          if (!_showPesquisa)
                             IconButton(
-                              tooltip: "Atualizar histórico",
+                              tooltip: _tab == _AddTab.favorites
+                                  ? "Atualizar favoritos"
+                                  : "Atualizar histórico",
                               icon: const Icon(Icons.refresh_rounded),
-                              onPressed: _loadingHistory ? null : _fetchHistory,
+                              onPressed: () {
+                                if (_tab == _AddTab.favorites) {
+                                  if (!_loadingFavs) _fetchFavorites();
+                                } else {
+                                  if (!_loadingHistory) _fetchHistory();
+                                }
+                              },
                             ),
                         ],
                       ),
@@ -280,6 +380,44 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
                     return _ResultTile(
                       item: it,
                       onTap: () => _openDetailFromSummary(it),
+                    );
+                  }
+                  // FAVORITOS
+                  if (_tab == _AddTab.favorites) {
+                    if (_loadingFavs && _favorites.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    if (_favorites.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          "Ainda não tens favoritos.",
+                          style: tt.bodyMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    }
+                    final f = _favorites[i - 1];
+                    return _FavoriteTile(
+                      item: f,
+                      onTap: () async {
+                        final day = widget.selectedDate ?? DateTime.now();
+                        await context.pushNamed(
+                          'productDetail',
+                          extra: {
+                            "barcode": f.barcode,
+                            "initialMeal": _selectedMeal.labelPt,
+                            "date": day,
+                          },
+                        );
+                        if (!mounted) return;
+                        _fetchFavorites();
+                      },
                     );
                   }
 
@@ -832,6 +970,132 @@ class _NutriTag extends StatelessWidget {
         style: Theme.of(
           context,
         ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w800, color: c),
+      ),
+    );
+  }
+}
+
+class _HeaderTabChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _HeaderTabChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Material(
+      color: selected
+          ? cs.primary
+          : cs.surfaceContainerHighest.withValues(alpha: .35),
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(
+            label,
+            style: tt.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: selected ? cs.onPrimary : cs.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FavoriteTile extends StatelessWidget {
+  final ProductFavoriteItem item;
+  final VoidCallback? onTap;
+  const _FavoriteTile({required this.item, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: tt.titleMedium?.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        Material(
+                          color: cs.primary,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: onTap,
+                            child: const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(
+                                Icons.add,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if ((item.brand ?? '').isNotEmpty) item.brand!,
+                        if (item.createdAt != null)
+                          "${item.createdAt!.day.toString().padLeft(2, '0')}/"
+                              "${item.createdAt!.month.toString().padLeft(2, '0')}/"
+                              "${item.createdAt!.year}",
+                      ].join(' • '),
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if ((item.nutriScore ?? '').isNotEmpty)
+                          _NutriTag(grade: item.nutriScore!),
+                        const SizedBox(width: 8),
+                        if (item.energyKcal100g != null)
+                          _ChipMetric(
+                            label: "por 100g",
+                            value: "${item.energyKcal100g} kcal",
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
