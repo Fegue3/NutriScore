@@ -39,15 +39,15 @@ class DailyTotals {
     required int consumedKcal,
     required Map<String, dynamic> macros,
   }) {
-    num _n(dynamic v) => (v ?? 0) * 1.0;
+    num n(dynamic v) => (v ?? 0) * 1.0;
     return DailyTotals(
       kcal: consumedKcal,
-      proteinG: _n(macros['protein']),
-      carbG: _n(macros['carb']),
-      fatG: _n(macros['fat']),
-      sugarsG: _n(macros['sugars']),
-      fiberG: _n(macros['fiber']),
-      saltG: _n(macros['salt']),
+      proteinG: n(macros['protein']),
+      carbG: n(macros['carb']),
+      fatG: n(macros['fat']),
+      sugarsG: n(macros['sugars']),
+      fiberG: n(macros['fiber']),
+      saltG: n(macros['salt']),
     );
   }
 }

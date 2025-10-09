@@ -171,14 +171,20 @@ class _NutritionStatsScreenState extends State<NutritionStatsScreen> {
                   '')
               .toString()
               .toLowerCase();
-      if (raw.contains('break') || raw.contains('peq') || raw.contains('manh'))
+      if (raw.contains('break') || raw.contains('peq') || raw.contains('manh')) {
         return 'breakfast';
-      if (raw.contains('lunch') || raw.contains('almo')) return 'lunch';
-      if (raw.contains('snack') || raw.contains('lanche')) return 'snack';
+      }
+      if (raw.contains('lunch') || raw.contains('almo')) {
+        return 'lunch';
+      }
+      if (raw.contains('snack') || raw.contains('lanche')) {
+        return 'snack';
+      }
       if (raw.contains('dinner') ||
           raw.contains('jantar') ||
-          raw.contains('noite'))
+          raw.contains('noite')) {
         return 'dinner';
+      }
       final idx = g['index'] ?? g['slotIndex'] ?? g['id'];
       if (idx is num) {
         switch (idx.toInt()) {
