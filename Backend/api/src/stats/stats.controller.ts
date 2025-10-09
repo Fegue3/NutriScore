@@ -44,4 +44,9 @@ export class StatsController {
       macros: day.macros,
     };
   }
+  @Get('recommended')
+  async recommended(@Req() req: Request) {
+    const userId = (req.user as any)?.sub as string; // igual ao resto do teu projeto
+    return this.stats.getRecommended(userId);
+  }
 }
