@@ -36,7 +36,7 @@ const num = (v: Prisma.Decimal | number | null | undefined) =>
 
 @Injectable()
 export class StatsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /** ISO de hoje (UTC) no formato YYYY-MM-DD */
   todayISO(): ISODate {
@@ -62,8 +62,91 @@ export class StatsService {
     return `${y}-${m}-${day}`;
   }
 
-  // ====== API ======
+  // ====== NOVO: materialização/refresh de DailyStats ======
+  /**
+   * Recalcula e materializa os totais diários (DailyStats) para um user e um dia.
+   * Se não houver items no dia, apaga a linha de cache (evita dados “fantasma”).
+   */
+  async recomputeDay(userId: string, dateUTC: Date): Promise<void> {
+    // Ler todas as refeições do dia com os campos necessários dos items
+    const meals = await this.prisma.meal.findMany({
+      where: { userId, date: dateUTC },
+      select: {
+        items: {
+          select: {
+            kcal: true,
+            protein: true,
+            carb: true,
+            fat: true,
+            sugars: true,
+            fiber: true,
+            salt: true,
+          },
+        },
+      },
+    });
 
+    // Agregar
+    const totals = meals.reduce((acc, m) => {
+      for (const it of m.items) {
+        acc.kcal += num(it.kcal);
+        acc.protein += num(it.protein);
+        acc.carb += num(it.carb);
+        acc.fat += num(it.fat);
+        acc.sugars += num(it.sugars);
+        acc.fiber += num(it.fiber);
+        acc.salt += num(it.salt);
+      }
+      return acc;
+    }, zero());
+
+    const isEmpty =
+      meals.length === 0 ||
+      (totals.kcal === 0 &&
+        totals.protein === 0 &&
+        totals.carb === 0 &&
+        totals.fat === 0 &&
+        totals.sugars === 0 &&
+        totals.fiber === 0 &&
+        totals.salt === 0);
+
+    // Se não houver nada no dia → remover cache (se existir)
+    if (isEmpty) {
+      await this.prisma.dailyStats.deleteMany({
+        where: { userId, date: dateUTC },
+      });
+      return;
+    }
+
+    // Caso contrário, upsert do snapshot agregado
+    await this.prisma.dailyStats.upsert({
+      where: { userId_date: { userId, date: dateUTC } },
+      create: {
+        userId,
+        date: dateUTC,
+        kcal: totals.kcal,
+        protein: totals.protein,
+        carb: totals.carb,
+        fat: totals.fat,
+        sugars: totals.sugars,
+        fiber: totals.fiber,
+        salt: totals.salt,
+      },
+      update: {
+        kcal: totals.kcal,
+        protein: totals.protein,
+        carb: totals.carb,
+        fat: totals.fat,
+        sugars: totals.sugars,
+        fiber: totals.fiber,
+        salt: totals.salt,
+        updatedAt: new Date(),
+      },
+    });
+
+  }
+
+  // ====== API existente ======
   async getDaily(params: { userId: string; dateISO: ISODate }) {
     const { userId, dateISO } = params;
     const date = this.startOfDayUTC(dateISO);
