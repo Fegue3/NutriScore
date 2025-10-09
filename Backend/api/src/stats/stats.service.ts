@@ -1,6 +1,7 @@
 // src/stats/stats.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CaloriesService } from '../calories/calories.service';
 import { MealType, Prisma } from '@prisma/client';
 
 type ISODate = string; // "YYYY-MM-DD"
@@ -36,7 +37,7 @@ const num = (v: Prisma.Decimal | number | null | undefined) =>
 
 @Injectable()
 export class StatsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService, private readonly calories: CaloriesService,) { }
 
   /** ISO de hoje (UTC) no formato YYYY-MM-DD */
   todayISO(): ISODate {
@@ -282,4 +283,61 @@ export class StatsService {
       })),
     };
   }
+  /**
+    * /stats/recommended — metas derivadas a partir da meta oficial de kcal.
+    * Fonte das kcal:
+    *   1) CaloriesService.getDaily(userId).targetCalories  ✅ (2560 no teu caso)
+    *   2) userGoals.dailyCalories
+    *   3) fallback 2000
+    * Restantes metas são DERIVADAS em runtime (não persiste nada).
+    */
+  async getRecommended(userId: string) {
+    let kcalFromCaloriesService: number | null = null;
+    try {
+      const todayISO = new Date().toISOString().slice(0, 10);
+      const daily = await this.calories.getCaloriesForDay(userId, todayISO, 'UTC');
+      const t = (daily as any)?.targetCalories;
+      if (typeof t === 'number' && Number.isFinite(t)) {
+        kcalFromCaloriesService = t;
+      }
+    } catch { }
+
+    const goals = await this.prisma.userGoals.findUnique({
+      where: { userId },
+      select: { dailyCalories: true },
+    });
+
+    const kcal = kcalFromCaloriesService ?? (goals?.dailyCalories ?? 2000);
+
+    const proteinG = Math.round((kcal * 0.20) / 4);
+    const carbG = Math.round((kcal * 0.50) / 4);
+    const fatG = Math.round((kcal * 0.30) / 9);
+    const fiberG = Math.round((kcal / 1000) * 14);
+    const sugarsG = Math.round((kcal * 0.10) / 4);
+    const saltG = 5;
+    const satFatG = Math.round((kcal * 0.10) / 9);
+
+    return {
+      targets: {
+        kcal,
+        protein_g: proteinG,
+        carb_g: carbG,
+        fat_g: fatG,
+        fiber_g: fiberG,
+        sugars_g_max: sugarsG,
+        salt_g_max: saltG,
+        sat_fat_g_max: satFatG,
+      },
+      source: {
+        kcal: kcalFromCaloriesService != null ? 'calories_service'
+          : goals?.dailyCalories ? 'user_goals'
+            : 'fallback(2000)',
+        macros: 'derived_from_kcal',
+        sugars: 'who_10_percent_rule',
+        salt: 'who_5g_limit',
+        sat_fat: 'who_10_percent_rule',
+      },
+    };
+  }
 }
+
