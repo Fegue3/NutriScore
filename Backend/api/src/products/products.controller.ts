@@ -1,7 +1,19 @@
 // src/products/products.controller.ts
-import { Controller, Get, Param, Query, Req, Post, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Req,
+  Post,
+  UseGuards,
+  ParseIntPipe,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { SearchDto } from './dto/search.dto';
+import { FavoritesQueryDto } from './dto/favorites.dto';
 import { AccessTokenGuard } from '../auth/auth.guards';
 
 @Controller('products')
@@ -12,7 +24,10 @@ export class ProductsController {
 
   // Sugestões rápidas (só cache local)
   @Get('suggest')
-  async suggest(@Query('q') q: string, @Query('limit', ParseIntPipe) limit = 8) {
+  async suggest(
+    @Query('q') q: string,
+    @Query('limit', ParseIntPipe) limit = 8,
+  ) {
     return this.products.suggestLocal(q, Number(limit));
   }
 
@@ -37,6 +52,55 @@ export class ProductsController {
     return this.products.listHistory(userId, page, pageSize, from, to);
   }
 
+  // ======== FAVORITOS ========
+
+  // Lista favoritos do utilizador (com dados do produto)
+  // GET /products/favorites?q=...&page=1&pageSize=20
+  @UseGuards(AccessTokenGuard)
+  @Get('favorites')
+  async listFavorites(@Req() req: any, @Query() q: FavoritesQueryDto) {
+    const userId: string = req.user.sub;
+    return this.products.listFavorites(userId, q.page, q.pageSize, q.q);
+  }
+
+  // Estado de favorito para um barcode
+  // GET /products/:barcode/favorite
+  @UseGuards(AccessTokenGuard)
+  @Get(':barcode/favorite')
+  async favoriteStatus(@Param('barcode') barcode: string, @Req() req: any) {
+    const userId: string = req.user.sub;
+    return this.products.isFavorited(userId, barcode);
+  }
+
+  // Add idempotente (garante favoritado=true)
+  // PUT /products/:barcode/favorite
+  @UseGuards(AccessTokenGuard)
+  @Put(':barcode/favorite')
+  async addFavorite(@Param('barcode') barcode: string, @Req() req: any) {
+    const userId: string = req.user.sub;
+    return this.products.addFavorite(userId, barcode);
+  }
+
+  // Remove idempotente (garante favoritado=false)
+  // DELETE /products/:barcode/favorite
+  @UseGuards(AccessTokenGuard)
+  @Delete(':barcode/favorite')
+  async removeFavorite(@Param('barcode') barcode: string, @Req() req: any) {
+    const userId: string = req.user.sub;
+    return this.products.removeFavorite(userId, barcode);
+  }
+
+  // Toggle (mantido para retrocompatibilidade)
+  // POST /products/:barcode/favorite
+  @UseGuards(AccessTokenGuard)
+  @Post(':barcode/favorite')
+  async toggleFavorite(@Param('barcode') barcode: string, @Req() req: any) {
+    const userId: string = req.user.sub;
+    return this.products.toggleFavorite(userId, barcode);
+  }
+
+  // ===========================
+
   // Pesquisa híbrida (local + enrichment async)
   @Get()
   async search(@Query() q: SearchDto) {
@@ -51,14 +115,5 @@ export class ProductsController {
   async getByBarcode(@Param('barcode') barcode: string, @Req() req: any) {
     const userId: string = req.user.sub;
     return this.products.getByBarcode(barcode, userId);
-  }
-
-  // Favoritos (toggle) — requer JWT
-  @UseGuards(AccessTokenGuard)
-  @Post(':barcode/favorite')
-  async toggleFavorite(@Param('barcode') barcode: string, @Req() req: any) {
-    const userId: string = req.user.sub;
-    // devolve 200 por omissão (Nest), o body indica o estado
-    return this.products.toggleFavorite(userId, barcode);
   }
 }
