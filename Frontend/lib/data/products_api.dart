@@ -630,3 +630,83 @@ class ProductsApi {
     }
   }
 }
+
+// --- ADD: DTO leve para favoritos ---
+class ProductFavoriteItem {
+  final String barcode;
+  final String name;
+  final String? brand;
+  final String? nutriScore; // "A"..."E"
+  final int? energyKcal100g;
+  final DateTime? createdAt; // quando foi marcado favorito
+
+  ProductFavoriteItem({
+    required this.barcode,
+    required this.name,
+    this.brand,
+    this.nutriScore,
+    this.energyKcal100g,
+    this.createdAt,
+  });
+
+  factory ProductFavoriteItem.fromJson(Map<String, dynamic> j) {
+    return ProductFavoriteItem(
+      barcode: j['barcode'] ?? '',
+      name: j['name'] ?? 'Produto',
+      brand: j['brand'],
+      nutriScore: j['nutriScore'],
+      energyKcal100g: j['energyKcal_100g'] ?? j['energyKcal100g'],
+      createdAt: j['createdAt'] != null ? DateTime.parse(j['createdAt']) : null,
+    );
+  }
+}
+
+class FavoritesPage {
+  final List<ProductFavoriteItem> items;
+  final int total;
+  final int page;
+  final int pageSize;
+
+  FavoritesPage({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.pageSize,
+  });
+
+  factory FavoritesPage.fromJson(Map<String, dynamic> j) {
+    final list = (j['items'] as List? ?? const [])
+        .map((e) => ProductFavoriteItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return FavoritesPage(
+      items: list,
+      total: j['total'] ?? list.length,
+      page: j['page'] ?? 1,
+      pageSize: j['pageSize'] ?? list.length,
+    );
+  }
+}
+
+// --- ADD: método para chamar GET /products/favorites ---
+extension ProductsApiFavorites on ProductsApi {
+  Future<FavoritesPage> getFavorites({
+    String? q,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final r = await _dio.get(
+      '${AuthApi.baseUrl}/products/favorites',
+      queryParameters: {
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        'page': page,
+        'pageSize': pageSize,
+      },
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer ${await AuthStorage.I.readAccessToken()}',
+        },
+      ),
+    );
+    return FavoritesPage.fromJson(r.data as Map<String, dynamic>);
+  }
+}
