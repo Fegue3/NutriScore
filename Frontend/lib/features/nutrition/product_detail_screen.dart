@@ -84,6 +84,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   bool _loading = false;
   bool _favorited = false;
+  bool _favoritedBusy = false; // NOVO: bloqueia o botão enquanto chama a API
 
   // estado do produto
   String? _name;
@@ -172,7 +173,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ? _origin
             : d.origin;
         _nutri = d.nutriScore ?? _nutri;
-        _favorited = d.isFavorite == true;
+        if (d.isFavorite != null) {
+          _favorited = d.isFavorite!;
+        }
 
         if (shouldFreeze) {
           return; // não sobrescreve porção/kcal/macros
@@ -238,6 +241,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _fiber = (hasServ ? d.fiberServ : d.fiber100g) ?? _fiber;
         _sodium = (hasServ ? d.sodiumServ : d.sodium100g) ?? _sodium;
       });
+
+      // --- sincronizar estado de favorito com o backend ---
+      try {
+        final fav = await ProductsApi.I.getFavoriteStatus(bc);
+        if (!mounted) return;
+        setState(() => _favorited = fav);
+      } catch (_) {
+        // silencioso: se falhar, mantemos o valor que já veio no detail (d.isFavorite)
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -323,31 +335,63 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             ),
                           ),
                           IconButton(
-                            tooltip: _favorited
-                                ? "Remover dos favoritos"
-                                : "Favorito",
+                            tooltip: _favoritedBusy
+                                ? "A processar..."
+                                : (_favorited
+                                      ? "Remover dos favoritos"
+                                      : "Adicionar aos favoritos"),
                             icon: Icon(
                               _favorited
                                   ? Icons.favorite_rounded
                                   : Icons.favorite_border_rounded,
                               color: cs.onPrimary,
                             ),
-                            onPressed: (widget.barcode == null)
+                            onPressed:
+                                (widget.barcode == null || _favoritedBusy)
                                 ? null
                                 : () async {
+                                    final bc = widget.barcode!;
                                     final messenger = ScaffoldMessenger.of(
                                       context,
                                     );
+                                    final prev = _favorited;
+
+                                    // UI otimista
+                                    setState(() {
+                                      _favoritedBusy = true;
+                                      _favorited = !prev;
+                                    });
+
                                     try {
-                                      final fav = await ProductsApi.I
-                                          .toggleFavorite(widget.barcode!);
-                                      if (!mounted) return;
-                                      setState(() => _favorited = fav);
+                                      if (!prev) {
+                                        // estava OFF → queremos ligar
+                                        final ok = await ProductsApi.I
+                                            .addFavorite(bc);
+                                        if (mounted) {
+                                          setState(
+                                            () => _favorited = ok == true,
+                                          );
+                                        }
+                                      } else {
+                                        // estava ON → queremos desligar
+                                        await ProductsApi.I.removeFavorite(bc);
+                                        if (mounted) {
+                                          // removeFavorite deve devolver false; forçamos estado a false
+                                          setState(() => _favorited = false);
+                                        }
+                                      }
                                     } catch (e) {
-                                      if (!mounted) return;
-                                      messenger.showSnackBar(
-                                        SnackBar(content: Text(e.toString())),
-                                      );
+                                      // reverte em caso de erro
+                                      if (mounted) {
+                                        setState(() => _favorited = prev);
+                                        messenger.showSnackBar(
+                                          SnackBar(content: Text(e.toString())),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() => _favoritedBusy = false);
+                                      }
                                     }
                                   },
                           ),
