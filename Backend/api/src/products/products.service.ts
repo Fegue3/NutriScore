@@ -368,7 +368,100 @@ export class ProductsService {
     return local;
   }
 
-  // ------------ Favoritos ------------
+  /* ===================== FAVORITOS ===================== */
+
+  // Lista favoritos com join a Product
+  async listFavorites(userId: string, page = 1, pageSize = 20, q?: string) {
+    const skip = (page - 1) * pageSize;
+
+    const whereProduct: Prisma.ProductWhereInput | undefined = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { brand: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          ],
+        }
+      : undefined;
+
+    const whereFav: Prisma.FavoriteProductWhereInput = {
+      userId,
+      ...(whereProduct
+        ? {
+            product: whereProduct,
+          }
+        : {}),
+    };
+
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.favoriteProduct.findMany({
+        where: whereFav,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          product: {
+            select: {
+              barcode: true,
+              name: true,
+              brand: true,
+              imageUrl: true,
+              nutriScore: true,
+              energyKcal_100g: true,
+            },
+          },
+        },
+      }),
+      this.prisma.favoriteProduct.count({ where: whereFav }),
+    ]);
+
+    const items = rows.map((r) => ({
+      barcode: r.product?.barcode ?? r.barcode,
+      name: r.product?.name ?? null,
+      brand: r.product?.brand ?? null,
+      imageUrl: r.product?.imageUrl ?? null,
+      nutriScore: r.product?.nutriScore ?? null,
+      energyKcal_100g: r.product?.energyKcal_100g ?? null,
+      createdAt: r.createdAt,
+    }));
+
+    return { items, total, page, pageSize };
+  }
+
+  // Estado (boolean) para um produto
+  async isFavorited(userId: string, barcode: string) {
+    const found = await this.prisma.favoriteProduct.findUnique({
+      where: { userId_barcode: { userId, barcode } },
+      select: { userId: true },
+    });
+    return { favorited: !!found };
+  }
+
+  // Add idempotente
+  async addFavorite(userId: string, barcode: string) {
+    try {
+      await this.prisma.favoriteProduct.create({
+        data: { userId, barcode },
+      });
+      return { favorited: true };
+    } catch (e: any) {
+      // Se já existir (unique), continua true
+      return { favorited: true };
+    }
+  }
+
+  // Remove idempotente
+  async removeFavorite(userId: string, barcode: string) {
+    try {
+      await this.prisma.favoriteProduct.delete({
+        where: { userId_barcode: { userId, barcode } },
+      });
+      return { favorited: false };
+    } catch {
+      return { favorited: false };
+    }
+  }
+
+  // Toggle (mantido)
   async toggleFavorite(userId: string, barcode: string) {
     try {
       await this.prisma.favoriteProduct.delete({
@@ -380,6 +473,8 @@ export class ProductsService {
       return { favorited: true };
     }
   }
+
+  /* ===================== HISTÓRICO ===================== */
 
   // ------------ Histórico (lista) ------------
   async listHistory(
@@ -424,7 +519,6 @@ export class ProductsService {
     const safeItems = rows.map((r) =>
       this.replaceBigInts({
         ...r,
-        // Garantia explícita no id (caso não uses o replaceBigInts noutro contexto)
         id:
           typeof (r as any).id === 'bigint'
             ? (r as any).id.toString()
