@@ -18,7 +18,11 @@ class AppShell extends StatelessWidget {
     final currentIndex = _indexForLocation(location);
 
     return Scaffold(
-      body: SafeArea(child: child),
+      body: SafeArea(
+    top: false,      
+    bottom: true,
+    child: child,
+  ),
       bottomNavigationBar: AppBottomNav(
         currentIndex: currentIndex,
         onChanged: (i) {
