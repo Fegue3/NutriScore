@@ -171,7 +171,9 @@ class _NutritionStatsScreenState extends State<NutritionStatsScreen> {
                   '')
               .toString()
               .toLowerCase();
-      if (raw.contains('break') || raw.contains('peq') || raw.contains('manh')) {
+      if (raw.contains('break') ||
+          raw.contains('peq') ||
+          raw.contains('manh')) {
         return 'breakfast';
       }
       if (raw.contains('lunch') || raw.contains('almo')) {
@@ -331,115 +333,124 @@ class _NutritionStatsScreenState extends State<NutritionStatsScreen> {
       backgroundColor: cs.surface,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
+        backgroundColor: cs.primary, // verde contínuo
+        foregroundColor: Colors.white,
         title: Text(
           'Nutrição',
-          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          style: tt.headlineSmall?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-        actions: [
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-        ],
       ),
+
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Column(
           children: [
-            // selector de dia
-            Row(
-              children: [
-                IconButton.filled(
-                  onPressed: _loading ? null : () => _go(-1),
-                  icon: const Icon(Icons.chevron_left_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: cs.surfaceContainerHighest,
-                    foregroundColor: cs.primary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
+            // ===== HERO VERDE (igual ao Diário) =====
+            Container(
+              color: cs.primary,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              child: SafeArea(
+                bottom: false,
+                child: Row(
+                  children: [
+                    IconButton.filled(
+                      onPressed: _loading ? null : () => _go(-1),
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white, // círculo branco
+                        foregroundColor: cs.primary, // ícone verde
+                        elevation: 0,
+                      ),
                     ),
-                    decoration: const ShapeDecoration(
-                      color: Colors.transparent,
-                      shape: StadiumBorder(),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _labelFor(context),
-                        style: tt.titleMedium?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w800,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: const ShapeDecoration(
+                          color: Colors.white, // pill branca
+                          shape: StadiumBorder(),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _labelFor(context),
+                            style: tt.titleMedium?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .2,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _loading ? null : () => _go(1),
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: cs.primary,
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: _loading ? null : () => _go(1),
-                  icon: const Icon(Icons.chevron_right_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: cs.surfaceContainerHighest,
-                    foregroundColor: cs.primary,
-                  ),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 16),
 
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  _error!,
-                  style: tt.bodyMedium?.copyWith(color: cs.error),
+            // ===== CONTEÚDO =====
+            Expanded(
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
-              ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        _error!,
+                        style: tt.bodyMedium?.copyWith(color: cs.error),
+                      ),
+                    ),
 
-            if (stats != null) ...[
-              // Pie chart
-              CaloriesMealsPie(
-                kcalByMeal: kcalByMeal,
-                totalKcal: _totalKcal(stats),
-                goalKcal: kcalTarget.toDouble(),
-              ),
-              const SizedBox(height: 16),
+                  if (stats != null) ...[
+                    // Pie chart
+                    CaloriesMealsPie(
+                      kcalByMeal: kcalByMeal,
+                      totalKcal: _totalKcal(stats),
+                      goalKcal: kcalTarget.toDouble(),
+                    ),
+                    const SizedBox(height: 16),
 
-              // Card “Calorias” + Macros
-              MacroSectionCard(
-                kcalUsed: stats.totals.kcal,
-                kcalTarget: kcalTarget,
-                proteinG: stats.totals.proteinG.toDouble(),
-                proteinTargetG: proteinTarget.toDouble(),
-                carbG: stats.totals.carbG.toDouble(),
-                carbTargetG: carbTarget.toDouble(),
-                fatG: stats.totals.fatG.toDouble(),
-                fatTargetG: fatTarget.toDouble(),
-                sugarsG: stats.totals.sugarsG.toDouble(),
-                fiberG: stats.totals.fiberG.toDouble(),
-                saltG: stats.totals.saltG.toDouble(),
-                sugarsTargetG: sugarsTarget.toDouble(),
-                fiberTargetG: fiberTarget.toDouble(),
-                saltTargetG: saltTarget.toDouble(),
+                    // Card “Calorias” + Macros
+                    MacroSectionCard(
+                      kcalUsed: stats.totals.kcal,
+                      kcalTarget: kcalTarget,
+                      proteinG: stats.totals.proteinG.toDouble(),
+                      proteinTargetG: proteinTarget.toDouble(),
+                      carbG: stats.totals.carbG.toDouble(),
+                      carbTargetG: carbTarget.toDouble(),
+                      fatG: stats.totals.fatG.toDouble(),
+                      fatTargetG: fatTarget.toDouble(),
+                      sugarsG: stats.totals.sugarsG.toDouble(),
+                      fiberG: stats.totals.fiberG.toDouble(),
+                      saltG: stats.totals.saltG.toDouble(),
+                      sugarsTargetG: sugarsTarget.toDouble(),
+                      fiberTargetG: fiberTarget.toDouble(),
+                      saltTargetG: saltTarget.toDouble(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
               ),
-              const SizedBox(height: 16),
-            ],
+            ),
           ],
         ),
       ),

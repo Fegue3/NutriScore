@@ -201,23 +201,22 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final topInset = MediaQuery.of(context).padding.top;
 
     final showingResults = _showPesquisa;
 
     return Scaffold(
       backgroundColor: cs.surface,
       body: SafeArea(
+        top: false,
         bottom: false,
         child: Column(
           children: [
             // ===================== HERO VERDE =====================
             Container(
+              padding: EdgeInsets.only(top: topInset),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [cs.primary, cs.tertiary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: cs.primary,
               ),
               child: Column(
                 children: [

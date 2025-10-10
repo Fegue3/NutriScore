@@ -268,6 +268,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
@@ -296,18 +297,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return Scaffold(
       backgroundColor: cs.surface,
       body: SafeArea(
+        top: false,
         bottom: false,
         child: CustomScrollView(
           slivers: [
             // HERO topo com voltar + favorito
             SliverToBoxAdapter(
               child: Container(
+                padding: EdgeInsets.only(top: topInset),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [cs.primary, cs.tertiary],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: cs.primary,
                 ),
                 child: Column(
                   children: [
