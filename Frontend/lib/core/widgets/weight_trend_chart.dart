@@ -92,11 +92,6 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
                   ),
                 ),
                 const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded),
-                  tooltip: 'Atualizar',
-                  onPressed: _loading ? null : _load,
-                ),
               ],
             ),
             const SizedBox(height: 8),
