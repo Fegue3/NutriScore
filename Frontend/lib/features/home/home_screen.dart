@@ -272,7 +272,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
 
                   const SizedBox(height: 16),
-
+                  // ===== Peso (gráfico) =====
+                  const SizedBox(height: 12),
+                  const WeightTrendCard(
+                    daysBack: 120, // opcional
+                    title: 'Evolução do peso',
+                    showLegend: true,
+                  ),
+                  const SizedBox(height: 16),
                   // ===== Macros (3 círculos) =====
                   _Card(
                     child: Column(
@@ -321,15 +328,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
 
                   const SizedBox(height: 16),
-                  // ===== Peso (gráfico) =====
-                  const SizedBox(height: 12),
-                  const WeightTrendCard(
-                    daysBack: 120, // opcional
-                    title: 'Evolução do peso',
-                    showLegend: true,
-                  ),
-                  const SizedBox(height: 16),
-
                   // ===== Refeições =====
                   _Card(
                     child: Column(
