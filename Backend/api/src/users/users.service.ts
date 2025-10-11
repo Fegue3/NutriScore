@@ -1,3 +1,4 @@
+// src/users/users.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, User } from '@prisma/client';
@@ -14,19 +15,10 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  /**
-   * Cria utilizador e o registo "goals" default (preferências integradas).
-   */
-  async createUser(
-    email: string,
-    passwordHash: string,
-    name?: string | null,
-  ): Promise<User> {
+  async createUser(email: string, passwordHash: string, name?: string | null): Promise<User> {
     const user = await this.prisma.user.create({
       data: { email, passwordHash, name: name ?? null },
     });
-
-    // Criar UserGoals vazio (falha silenciosa se já existir)
     await this.prisma.userGoals.create({ data: { userId: user.id } }).catch(() => {});
     return user;
   }
@@ -40,26 +32,27 @@ export class UsersService {
 
   async deleteUserCascade(userId: string) {
     await this.prisma.user
-      .update({
-        where: { id: userId },
-        data: { refreshTokenHash: null },
-        select: { id: true },
-      })
+      .update({ where: { id: userId }, data: { refreshTokenHash: null }, select: { id: true } })
       .catch(() => {});
 
     try {
       await this.prisma.user.delete({ where: { id: userId } });
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2025'
-      ) {
-        // idempotente: já não existe
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        // já não existe
       } else {
         throw err;
       }
     }
     return { ok: true };
+  }
+
+  // >>> Novo: update de campos básicos do utilizador
+  updateUser(userId: string, data: { name?: string; email?: string }) {
+    const payload: Prisma.UserUpdateInput = {};
+    if (typeof data.name === 'string') payload.name = data.name;
+    if (typeof data.email === 'string') payload.email = data.email;
+    return this.prisma.user.update({ where: { id: userId }, data: payload });
   }
 
   // ---------------- Flags de onboarding ----------------
