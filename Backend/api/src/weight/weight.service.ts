@@ -25,79 +25,104 @@ export class WeightService {
     return new Date(`${iso}T00:00:00.000Z`);
   }
 
-  /** Upsert (userId, day) + update do currentWeightKg (UserGoals) numa transação */
+  /**
+   * Cria SEMPRE um novo registo no weightLog (histórico real),
+   * e atualiza o currentWeightKg em UserGoals — tudo numa transação.
+   *
+   * Observações:
+   * - Requer que o modelo `weightLog` NÃO tenha `@@unique([userId, day])`.
+   * - Campos esperados em weightLog: id, userId, day(Date), weightKg(Decimal/Float), source?, note?, createdAt(DateTime @default(now())).
+   */
   async upsertWeight(userId: string, dto: UpsertWeightDto) {
     const dayISO = dto.date ?? this.todayISO();
     const day = this.startOfDayUTC(dayISO);
+
     const kg = Number(dto.weightKg);
     if (!Number.isFinite(kg) || kg <= 0 || kg > 400) {
       throw new BadRequestException('weightKg inválido');
     }
 
-    const log = await this.prisma.$transaction(async (tx) => {
-      const upserted = await tx.weightLog.upsert({
-        where: { userId_day: { userId, day } }, // compósito do @@unique
-        create: {
+    const created = await this.prisma.$transaction(async (tx) => {
+      // 1) cria SEMPRE um novo ponto no log
+      const log = await tx.weightLog.create({
+        data: {
           userId,
-          day,
+          day,                   // âncora diária (00:00Z)
           weightKg: kg,
           source: dto.source ?? 'manual',
           note: dto.note,
+          // createdAt vem por default(now())
         },
-        update: {
-          weightKg: kg,
-          source: dto.source ?? 'manual',
-          note: dto.note,
-          createdAt: new Date(), // marca atualização
+        select: {
+          id: true,
+          day: true,
+          weightKg: true,
+          source: true,
+          note: true,
+          createdAt: true,
         },
       });
 
-      // garante existência de UserGoals e atualiza peso atual
+      // 2) atualiza/garante metas com o peso atual
       await tx.userGoals.upsert({
         where: { userId },
         create: { userId, currentWeightKg: kg },
         update: { currentWeightKg: kg },
       });
 
-      return upserted;
+      return log;
     });
 
     return {
       ok: true,
-      log: { day: dayISO, weightKg: kg, source: log.source, note: log.note },
+      log: {
+        id: created.id,
+        date: created.day.toISOString().slice(0, 10), // YYYY-MM-DD
+        weightKg: Number(created.weightKg),
+        source: created.source,
+        note: created.note,
+        createdAt: created.createdAt.toISOString(),
+      },
     };
   }
 
-  /** Série temporal [from,to] (ambos inclusivos) ordenada */
+  /**
+   * Série temporal entre [from,to] (ambos inclusivos), ordenada por (day ASC, createdAt ASC).
+   * Se existirem vários registos no mesmo dia, todos são devolvidos (para gráfico com variação intra-dia).
+   */
   async getRange(userId: string, fromISO: ISODate, toISO: ISODate) {
     const from = this.startOfDayUTC(fromISO);
     const to = this.startOfDayUTC(toISO);
 
     const items = await this.prisma.weightLog.findMany({
       where: { userId, day: { gte: from, lte: to } },
-      orderBy: { day: 'asc' },
-      select: { day: true, weightKg: true, source: true, note: true },
+      orderBy: [{ day: 'asc' }, { createdAt: 'asc' }],
+      select: { day: true, weightKg: true, source: true, note: true, createdAt: true },
     });
 
     return {
       from: fromISO,
       to: toISO,
       points: items.map((w) => ({
-        date: w.day.toISOString().slice(0, 10),
+        date: w.day.toISOString().slice(0, 10),          // ancora diária
         weightKg: Number(w.weightKg),
         source: w.source,
         note: w.note,
+        createdAt: w.createdAt.toISOString(),            // timestamp exato (para mostrar horas)
       })),
     };
   }
 
-  /** Último registo do utilizador */
+  /**
+   * Último registo do utilizador (mais recente por createdAt; em empate, por day).
+   */
   async getLatest(userId: string) {
     const latest = await this.prisma.weightLog.findFirst({
       where: { userId },
-      orderBy: { day: 'desc' },
-      select: { day: true, weightKg: true, source: true, note: true },
+      orderBy: [{ createdAt: 'desc' }, { day: 'desc' }],
+      select: { day: true, weightKg: true, source: true, note: true, createdAt: true },
     });
+
     if (!latest) return { date: null, weightKg: null };
 
     return {
@@ -105,6 +130,7 @@ export class WeightService {
       weightKg: Number(latest.weightKg),
       source: latest.source,
       note: latest.note,
+      createdAt: latest.createdAt.toISOString(),
     };
   }
 }
