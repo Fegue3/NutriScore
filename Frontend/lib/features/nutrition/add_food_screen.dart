@@ -215,9 +215,7 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
             // ===================== HERO VERDE =====================
             Container(
               padding: EdgeInsets.only(top: topInset),
-              decoration: BoxDecoration(
-                color: cs.primary,
-              ),
+              decoration: BoxDecoration(color: cs.primary),
               child: Column(
                 children: [
                   // Back + combo (chip verde blendado)
@@ -273,7 +271,14 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: _ScanCardSurfaceGreen(
                 onTap: () {
-                  // TODO: abrir scanner
+                  context.push(
+                    '/scan',
+                    extra: {
+                      'initialMeal': _selectedMeal.labelPt,
+                      'date': (widget.selectedDate ?? DateTime.now())
+                          .toIso8601String(),
+                    },
+                  );
                 },
               ),
             ),
