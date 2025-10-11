@@ -348,6 +348,5 @@ model WeightLog {
   note      String?
   createdAt DateTime @default(now())
 
-  @@unique([userId, day]) // 1 registo de peso por dia/utilizador
   @@index([userId, day])
 }
