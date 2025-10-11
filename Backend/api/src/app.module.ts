@@ -8,6 +8,7 @@ import {CaloriesModule} from "./calories/calories.module"
 import { ProductsModule } from './products/products.module';
 import { MealsModule } from './meals/meals.module';
 import { StatsModule } from './stats/stats.module';
+import {WeightModule} from "./weight/weight.module"
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { StatsModule } from './stats/stats.module';
     ProductsModule,
     MealsModule,
     StatsModule,
+    WeightModule,
   ],
 })
 export class AppModule {}
