@@ -7,7 +7,21 @@ class AuthApi {
   AuthApi._();
   static final AuthApi I = AuthApi._();
 
+  // Override opcional para o baseUrl (ex.: vindo de settings ou bootstrap)
+  static String? _baseUrlOverride;
+
+  
+
+  static void setBaseUrlOverride(String? url) {
+    final v = url?.trim();
+    _baseUrlOverride = (v == null || v.isEmpty) ? null : v;
+  }
+
   static String get baseUrl {
+    // 0) Se alguém definiu override (ex.: num ecrã de servidor), usa-o.
+    if (_baseUrlOverride != null && _baseUrlOverride!.isNotEmpty) {
+      return _baseUrlOverride!;
+    }
     const fromEnv = String.fromEnvironment('BACKEND_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
 
@@ -241,19 +255,30 @@ class AuthApi {
     }
   }
 
-    Future<({String id, String email, String? name})> getMe() async {
+  Future<({String id, String email, String? name})> getMe() async {
     try {
-      final res = await _dio.get('/users/me'); // podes trocar para /auth/me se preferires
-      final raw = res.data is Map ? (res.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
-      final obj = (raw['user'] is Map ? raw['user'] as Map : raw).cast<String, dynamic>();
+      final res = await _dio.get(
+        '/users/me',
+      ); // podes trocar para /auth/me se preferires
+      final raw = res.data is Map
+          ? (res.data as Map).cast<String, dynamic>()
+          : const <String, dynamic>{};
+      final obj = (raw['user'] is Map ? raw['user'] as Map : raw)
+          .cast<String, dynamic>();
       final id = (obj['id'] ?? obj['sub'] ?? '').toString();
       final email = (obj['email'] ?? '').toString();
       final name = (obj['name'] as String?)?.trim();
       if (email.isEmpty) throw 'Resposta inválida de /users/me (email vazio)';
-      return (id: id, email: email, name: (name?.isEmpty ?? true) ? null : name);
+      return (
+        id: id,
+        email: email,
+        name: (name?.isEmpty ?? true) ? null : name,
+      );
     } on DioException catch (e) {
       final code = e.response?.statusCode;
-      final msg = e.response?.data is Map ? ((e.response!.data['message'] ?? e.message) as Object?).toString() : (e.message ?? 'Erro de rede');
+      final msg = e.response?.data is Map
+          ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
+          : (e.message ?? 'Erro de rede');
       throw 'Falha em GET /users/me: $msg (code=$code)';
     }
   }
