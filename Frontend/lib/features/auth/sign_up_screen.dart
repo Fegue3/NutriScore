@@ -40,7 +40,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
       if (!mounted) return;
       final ob = di.authRepository.onboardingCompleted; // bool?
-      context.go(ob == false ? '/onboarding' : '/dashboard');
+      GoRouter.of(context).go(ob == false ? '/onboarding' : '/dashboard');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
