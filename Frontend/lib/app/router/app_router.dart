@@ -16,6 +16,7 @@ import '../../features/settings/settings_screen.dart';
 import '../../features/settings/edit_user_screen.dart';
 import '../../features/nutrition/nutrition_stats_screen.dart';
 import '../../features/weight/weight_progress_screen.dart';
+import '../../features/scanner/scanner_screen.dart';
 
 import '../app_shell.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -94,6 +95,18 @@ GoRouter buildAppRouter(AuthRepository repo) {
           );
         },
       ),
+      GoRoute(
+        path: '/scan',
+        builder: (_, state) {
+          // passa extras opcionais vindos do AddFood (refeição/data)
+          final extras = (state.extra as Map?) ?? const {};
+          return ScannerScreen(
+            initialMealLabelPt: extras['initialMeal']?.toString(),
+            isoDate: extras['date']?.toString(),
+          );
+        },
+      ),
+
       GoRoute(
         path: '/weight',
         name: 'weight',
