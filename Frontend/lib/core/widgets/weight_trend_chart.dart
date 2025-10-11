@@ -74,7 +74,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
       color: cs.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outline.withOpacity(.15)),
+        side: BorderSide(color: cs.outline.withValues(alpha: .15)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -106,7 +106,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
                           child: Text(
                             _error!,
                             style: TextStyle(
-                              color: cs.onSurface.withOpacity(.7),
+                              color: cs.onSurface.withValues(alpha: .7),
                               fontSize: 13,
                             ),
                           ),
@@ -116,7 +116,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
                               child: Text(
                                 'Sem registos ainda',
                                 style: TextStyle(
-                                  color: cs.onSurface.withOpacity(.7),
+                                  color: cs.onSurface.withValues(alpha: .7),
                                   fontSize: 13,
                                 ),
                               ),
@@ -130,7 +130,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
                 child: Text(
                   'Toque e arraste para ver valores',
                   style: TextStyle(
-                    color: cs.onSurface.withOpacity(.6),
+                    color: cs.onSurface.withValues(alpha: .6),
                     fontSize: 11,
                   ),
                 ),
@@ -155,7 +155,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) => FlLine(
-            color: cs.outline.withOpacity(.22),
+            color: cs.outline.withValues(alpha: .22),
             strokeWidth: 1,
           ),
         ),
@@ -170,7 +170,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
               getTitlesWidget: (v, _) => Text(
                 v.toStringAsFixed(1),
                 style: TextStyle(
-                  color: cs.onSurface.withOpacity(.72),
+                  color: cs.onSurface.withValues(alpha: .72),
                   fontSize: 10,
                 ),
               ),
@@ -194,7 +194,7 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
                   child: Text(
                     label,
                     style: TextStyle(
-                      color: cs.onSurface.withOpacity(.72),
+                      color: cs.onSurface.withValues(alpha: .72),
                       fontSize: 10,
                     ),
                   ),
@@ -245,8 +245,8 @@ class _WeightTrendCardState extends State<WeightTrendCard> {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  cs.primary.withOpacity(.25),
-                  cs.primary.withOpacity(.05),
+                  cs.primary.withValues(alpha: .25),
+                  cs.primary.withValues(alpha: .05),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
