@@ -15,6 +15,7 @@ import '../../features/nutrition/product_detail_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/settings/edit_user_screen.dart';
 import '../../features/nutrition/nutrition_stats_screen.dart';
+import '../../features/weight/weight_progress_screen.dart';
 
 import '../app_shell.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -93,6 +94,12 @@ GoRouter buildAppRouter(AuthRepository repo) {
           );
         },
       ),
+      GoRoute(
+        path: '/weight',
+        name: 'weight',
+        builder: (ctx, st) => const WeightProgressScreen(),
+      ),
+
       GoRoute(
         path: '/settings/user',
         pageBuilder: (_, __) => const NoTransitionPage(child: EditUserScreen()),
