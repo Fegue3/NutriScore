@@ -240,4 +240,62 @@ class AuthApi {
       throw 'PATCH /api/me/flags falhou (status=$status, body=$body)';
     }
   }
+
+    Future<({String id, String email, String? name})> getMe() async {
+    try {
+      final res = await _dio.get('/users/me'); // podes trocar para /auth/me se preferires
+      final raw = res.data is Map ? (res.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+      final obj = (raw['user'] is Map ? raw['user'] as Map : raw).cast<String, dynamic>();
+      final id = (obj['id'] ?? obj['sub'] ?? '').toString();
+      final email = (obj['email'] ?? '').toString();
+      final name = (obj['name'] as String?)?.trim();
+      if (email.isEmpty) throw 'Resposta inválida de /users/me (email vazio)';
+      return (id: id, email: email, name: (name?.isEmpty ?? true) ? null : name);
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = e.response?.data is Map ? ((e.response!.data['message'] ?? e.message) as Object?).toString() : (e.message ?? 'Erro de rede');
+      throw 'Falha em GET /users/me: $msg (code=$code)';
+    }
+  }
+
+  // Atualiza perfil (PATCH /users/me)
+  Future<({String id, String email, String? name})> updateMe({
+    String? name,
+    String? email,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        if (name != null) 'name': name,
+        if (email != null) 'email': email,
+      };
+      final res = await _dio.patch('/users/me', data: payload);
+      final raw = (res.data as Map).cast<String, dynamic>();
+      final obj = (raw['user'] as Map).cast<String, dynamic>();
+      return (
+        id: obj['id'] as String,
+        email: obj['email'] as String,
+        name: (obj['name'] as String?)?.trim(),
+      );
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = e.response?.data is Map
+          ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
+          : (e.message ?? 'Erro de rede');
+      throw 'Falha em PATCH /users/me: $msg (code=$code)';
+    }
+  }
+
+  // (Opcional) Lê goals para pré-preencher o formulário
+  Future<Map<String, dynamic>> getGoals() async {
+    try {
+      final res = await _dio.get('/api/me/goals');
+      return (res.data as Map).cast<String, dynamic>();
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = e.response?.data is Map
+          ? ((e.response!.data['message'] ?? e.message) as Object?).toString()
+          : (e.message ?? 'Erro de rede');
+      throw 'Falha em GET /api/me/goals: $msg (code=$code)';
+    }
+  }
 }
