@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/auth_api.dart';
+import '../../data/weight_api.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.authRepository});
@@ -13,7 +15,16 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-enum _Step { gender, birthdate, weight, targetWeight, targetDate, height, activity, done }
+enum _Step {
+  gender,
+  birthdate,
+  weight,
+  targetWeight,
+  targetDate,
+  height,
+  activity,
+  done,
+}
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _page = PageController();
@@ -32,7 +43,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _targetDateCtrl = TextEditingController();
 
   String?
-      _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
+  _activity; // "sedentary" | "light" | "moderate" | "active" | "very_active"
 
   bool _submitting = false;
 
@@ -173,11 +184,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         // Opcional: se vazio, segue. Se preenchido, valida intervalo.
         if (_targetDate == null) return true;
         final now = DateTime.now();
-        final earliest = DateTime(now.year, now.month, now.day).add(const Duration(days: 1)); // amanhã
+        final earliest = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).add(const Duration(days: 1)); // amanhã
         final latest = DateTime(now.year + 2, now.month, now.day); // até 2 anos
         if (_targetDate!.isBefore(earliest) || _targetDate!.isAfter(latest)) {
           snack.showSnackBar(
-            const SnackBar(content: Text('Escolhe uma data futura (até 2 anos).')),
+            const SnackBar(
+              content: Text('Escolhe uma data futura (até 2 anos).'),
+            ),
           );
           return false;
         }
@@ -216,8 +233,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // 1) Tenta guardar metas (se falhar, seguimos — não é bloqueante)
     try {
       final double? w = double.tryParse(_weight.text.replaceAll(',', '.'));
-      final double? tw =
-          double.tryParse(_targetWeight.text.replaceAll(',', '.'));
+      final double? tw = double.tryParse(
+        _targetWeight.text.replaceAll(',', '.'),
+      );
       final int? h = int.tryParse(_height.text);
       await AuthApi.I.upsertGoals(
         sex: _gender,
@@ -230,6 +248,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
     } catch (_) {
       // opcional: log / snackbar “não foi possível guardar metas, tentamos mais tarde”
+    }
+    try {
+      final double? w = double.tryParse(_weight.text.replaceAll(',', '.'));
+      if (w != null) {
+        await WeightApi.I.upsertWeight(
+          weightKg: w,
+          date: DateTime.now(),
+          source: 'onboarding', // <- chave para idempotência lógica no backend
+        );
+      }
+    } on DioException catch (e) {
+      final code = e.response?.statusCode ?? 0;
+      // Se o backend devolver conflito/validação (já existe “peso inicial”)
+      if (code == 409 || code == 422) {
+        // trata como OK e segue
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Não foi possível registar o peso inicial agora. Podes tentar mais tarde.',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Qualquer outro erro não bloqueia o onboarding
     }
 
     // 2) Marca onboarding concluído (isto é BLOQUEANTE para sair daqui)
@@ -446,12 +492,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _pickTargetDate() async {
     final now = DateTime.now();
-    final first = DateTime(now.year, now.month, now.day).add(const Duration(days: 1)); // amanhã
+    final first = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 1)); // amanhã
     final last = DateTime(now.year + 2, now.month, now.day); // até 2 anos
 
     final initial = _targetDate != null
         ? _targetDate!
-        : DateTime(now.year, now.month, now.day).add(const Duration(days: 90)); // sugestão: ~3 meses
+        : DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).add(const Duration(days: 90)); // sugestão: ~3 meses
 
     final picked = await showDatePicker(
       context: context,
@@ -559,8 +613,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: cs.primary, width: 2),
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -721,8 +777,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: cs.primary, width: 2),
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
           ),
         ),
         const SizedBox(height: 8),
