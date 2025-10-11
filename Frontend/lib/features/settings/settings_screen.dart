@@ -396,7 +396,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         await AuthApi.I.deleteAccount();
       } catch (_) {
-        /* TODO: mostrar erro detalhado se precisares */
       }
       await di.di.authRepository.logout();
       if (!mounted) return;
