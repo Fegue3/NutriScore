@@ -283,9 +283,12 @@ class _AddFoodScreenState extends State<AddFoodScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                 itemCount: (() {
-                  if (_showPesquisa || _tab == _AddTab.results)
+                  if (_showPesquisa || _tab == _AddTab.results) {
                     return _results.length + 1;
-                  if (_tab == _AddTab.favorites) return _favorites.length + 1;
+                  }
+                  if (_tab == _AddTab.favorites) {
+                    return _favorites.length + 1;
+                  }
                   return _history.length + 1;
                 })(),
 
