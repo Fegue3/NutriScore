@@ -1258,71 +1258,21 @@ class _BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
 
-    const freshGreen = Color(0xFF4CAF6D);
-    const leafyGreen = Color(0xFF66BB6A);
-
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _TonalPill(
-                icon: Icons.pie_chart_outline_rounded,
-                label: "Nutrição",
-                onTap: onOpenNutrition, // <-- chama o callback
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: _TonalPill(icon: Icons.note_alt_outlined, label: "Notas"),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        // ... resto inalterado
-        DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                blurRadius: 18,
-                offset: Offset(0, 10),
-                color: Color(0x26000000),
-              ),
-            ],
-            gradient: const LinearGradient(
-              colors: [freshGreen, leafyGreen],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.flag_circle_rounded, color: Colors.white),
-              label: Text(
-                "Acabar o dia",
-                style: tt.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: const StadiumBorder(),
-                foregroundColor: cs.onPrimary,
-              ),
-            ),
+        Expanded(
+          child: _TonalPill(
+            icon: Icons.pie_chart_outline_rounded,
+            label: "Nutrição",
+            onTap: onOpenNutrition,
           ),
         ),
       ],
     );
   }
 }
+
 
 class _TonalPill extends StatelessWidget {
   final IconData icon;
