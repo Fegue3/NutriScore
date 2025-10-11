@@ -39,14 +39,14 @@ enum Sex {
 
 // ---------- USERS ----------
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  passwordHash String
-  refreshTokenHash String?
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  onboardingCompleted Boolean @default(false)
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  passwordHash        String
+  refreshTokenHash    String?
+  name                String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  onboardingCompleted Boolean  @default(false)
 
   // relações
   goals       UserGoals?
@@ -56,6 +56,7 @@ model User {
   customMeals CustomMeal[]
   history     ProductHistory[]
   favorites   FavoriteProduct[]
+  weightLogs  WeightLog[]
 }
 
 // ---------- USER GOALS + PREFERENCES (fundidos) ----------
@@ -64,28 +65,28 @@ model UserGoals {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Biometrics / perfil (para IMC e necessidades calóricas)
-  sex           Sex?
-  dateOfBirth   DateTime?     // calcular idade
-  heightCm      Int?          // altura em cm
+  sex             Sex?
+  dateOfBirth     DateTime? // calcular idade
+  heightCm        Int? // altura em cm
   currentWeightKg Decimal?  @db.Decimal(5, 2)
   targetWeightKg  Decimal?  @db.Decimal(5, 2)
   targetDate      DateTime?
-  activityLevel   String?      // "sedentary", "light", etc.
+  activityLevel   String? // "sedentary", "light", etc.
 
   // Preferências / restrições alimentares
-  lowSalt     Boolean @default(false)
-  lowSugar    Boolean @default(false)
-  vegetarian  Boolean @default(false)
-  vegan       Boolean @default(false)
-  allergens   String?          // ex: "milk, peanuts"
+  lowSalt    Boolean @default(false)
+  lowSugar   Boolean @default(false)
+  vegetarian Boolean @default(false)
+  vegan      Boolean @default(false)
+  allergens  String? // ex: "milk, peanuts"
 
   // Metas diárias base
-  dailyCalories  Int?          // kcal alvo
-  carbPercent    Int?          // 0..100
-  proteinPercent Int?          // 0..100
-  fatPercent     Int?          // 0..100
+  dailyCalories  Int? // kcal alvo
+  carbPercent    Int? // 0..100
+  proteinPercent Int? // 0..100
+  fatPercent     Int? // 0..100
 
-  updatedAt      DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 }
 
 // ---------- PRODUCT (cache OFF) ----------
@@ -164,9 +165,9 @@ model ProductHistory {
   scannedAt  DateTime    @default(now())
   nutriScore NutriGrade?
   calories   Int?
-  proteins     Decimal?    @db.Decimal(6, 2)
-  carbs        Decimal?    @db.Decimal(6, 2)
-  fat       Decimal?    @db.Decimal(6, 2)
+  proteins   Decimal?    @db.Decimal(6, 2)
+  carbs      Decimal?    @db.Decimal(6, 2)
+  fat        Decimal?    @db.Decimal(6, 2)
 
   @@index([userId, scannedAt])
   @@index([barcode])
@@ -316,20 +317,37 @@ model MealItem {
 }
 
 model DailyStats {
-  userId String
-  date   DateTime   // 00:00 UTC (mesmo canónico das Meals)
+  userId  String
+  date    DateTime // 00:00 UTC (mesmo canónico das Meals)
   // totais do dia (somatório de MealItem caches)
-  kcal    Int        @default(0)
-  protein Decimal    @db.Decimal(10,2) @default(0)
-  carb    Decimal    @db.Decimal(10,2) @default(0)
-  fat     Decimal    @db.Decimal(10,2) @default(0)
-  sugars  Decimal    @db.Decimal(10,2) @default(0)
-  fiber   Decimal    @db.Decimal(10,2) @default(0)
-  salt    Decimal    @db.Decimal(10,2) @default(0)
+  kcal    Int      @default(0)
+  protein Decimal  @default(0) @db.Decimal(10, 2)
+  carb    Decimal  @default(0) @db.Decimal(10, 2)
+  fat     Decimal  @default(0) @db.Decimal(10, 2)
+  sugars  Decimal  @default(0) @db.Decimal(10, 2)
+  fiber   Decimal  @default(0) @db.Decimal(10, 2)
+  salt    Decimal  @default(0) @db.Decimal(10, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@id([userId, date])
   @@index([userId, date])
+}
+
+model WeightLog {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // guarda a data canónica do registo (não precisa de hora)
+  day      DateTime @db.Date
+  weightKg Decimal  @db.Decimal(5, 2)
+
+  source    String? // "manual" | "import" | "sync"
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, day]) // 1 registo de peso por dia/utilizador
+  @@index([userId, day])
 }
