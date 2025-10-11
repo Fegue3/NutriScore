@@ -50,6 +50,7 @@ export class AuthController {
       user: {
         id: u.sub,
         email: u.email,
+        name: dbUser?.name ?? null,
         onboardingCompleted: !!dbUser?.onboardingCompleted,
       },
     };
