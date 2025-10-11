@@ -503,7 +503,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     iconBg: AppColors.freshGreen.withAlpha(24),
                     iconColor: AppColors.freshGreen,
                     title: 'Ver progresso de nutrição',
-                    onTap: () => context.go('/nutrition'),
+                    onTap: () => context.push('/weight'),
                   ),
                 ],
               ),
