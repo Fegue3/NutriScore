@@ -6,10 +6,11 @@ import 'package:flutter/services.dart';
 // usa as variáveis do teu theme.dart
 import '../../core/theme.dart' show AppColors;
 
-import '../../app/di.dart';                // logout()
-import '../../data/calorie_api.dart';      // CalorieApi.I
-import '../../data/stats_api.dart';        // StatsApi.I + modelos
-import '../../data/meals_api.dart';        // MealsApi.I (DayMeals, MealEntry)
+import '../../app/di.dart'; // logout()
+import '../../data/calorie_api.dart'; // CalorieApi.I
+import '../../data/stats_api.dart'; // StatsApi.I + modelos
+import '../../data/meals_api.dart'; // MealsApi.I (DayMeals, MealEntry)
+import '../../core/widgets/weight_trend_chart.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,11 +39,10 @@ class _HomeScreenState extends State<HomeScreen> {
   double _kBreakfast = 0, _kLunch = 0, _kSnack = 0, _kDinner = 0;
 
   // macros consumidas
-  num _proteinG = 0, _carbG = 0, _fatG = 0, _sugarsG = 0, _saltG = 0;
+  num _proteinG = 0, _carbG = 0, _fatG = 0;
 
   // metas/limites
   num _targetProteinG = 0, _targetCarbG = 0, _targetFatG = 0;
-  num _maxSugarsG = 0, _maxSaltG = 0;
 
   @override
   void initState() {
@@ -99,44 +99,42 @@ class _HomeScreenState extends State<HomeScreen> {
       final userGoalKcal = stats.goals.kcal;
 
       _proteinG = stats.totals.proteinG;
-      _carbG    = stats.totals.carbG;
-      _fatG     = stats.totals.fatG;
-      _sugarsG  = stats.totals.sugarsG;
-      _saltG    = stats.totals.saltG;
+      _carbG = stats.totals.carbG;
+      _fatG = stats.totals.fatG;
 
       _targetProteinG = stats.goals.proteinG ?? 0;
-      _targetCarbG    = stats.goals.carbG ?? 0;
-      _targetFatG     = stats.goals.fatG ?? 0;
+      _targetCarbG = stats.goals.carbG ?? 0;
+      _targetFatG = stats.goals.fatG ?? 0;
 
       final rec = await StatsApi.I.getRecommendedTargets();
       _targetProteinG = _targetProteinG == 0 ? rec.proteinG : _targetProteinG;
-      _targetCarbG    = _targetCarbG    == 0 ? rec.carbG    : _targetCarbG;
-      _targetFatG     = _targetFatG     == 0 ? rec.fatG     : _targetFatG;
-      _maxSugarsG     = rec.sugarsGMax;
-      _maxSaltG       = rec.saltGMax;
+      _targetCarbG = _targetCarbG == 0 ? rec.carbG : _targetCarbG;
+      _targetFatG = _targetFatG == 0 ? rec.fatG : _targetFatG;
 
       if (stats.byMealRaw != null) {
         double parseKcal(dynamic v) =>
             v is num ? v.toDouble() : (double.tryParse('$v') ?? 0);
         final m = Map<String, dynamic>.from(stats.byMealRaw!);
         _kBreakfast = parseKcal((m['BREAKFAST'] ?? m['breakfast'])?['kcal']);
-        _kLunch     = parseKcal((m['LUNCH']     ?? m['lunch'])?['kcal']);
-        _kSnack     = parseKcal((m['SNACK']     ?? m['snack'])?['kcal']);
-        _kDinner    = parseKcal((m['DINNER']    ?? m['dinner'])?['kcal']);
+        _kLunch = parseKcal((m['LUNCH'] ?? m['lunch'])?['kcal']);
+        _kSnack = parseKcal((m['SNACK'] ?? m['snack'])?['kcal']);
+        _kDinner = parseKcal((m['DINNER'] ?? m['dinner'])?['kcal']);
       } else {
         final dm = await MealsApi.I.getDay(day);
         final parsed = _kcalByMealFromDayMeals(dm);
         _kBreakfast = parsed['breakfast'] ?? 0;
-        _kLunch     = parsed['lunch'] ?? 0;
-        _kSnack     = parsed['snack'] ?? 0;
-        _kDinner    = parsed['dinner'] ?? 0;
+        _kLunch = parsed['lunch'] ?? 0;
+        _kSnack = parsed['snack'] ?? 0;
+        _kDinner = parsed['dinner'] ?? 0;
         if (_consumedKcal == 0) {
           _consumedKcal = (_kBreakfast + _kLunch + _kSnack + _kDinner).round();
         }
       }
 
-      _goalKcal     = userGoalKcal ?? goalFromCalorieApi;
-      _consumedKcal = consumedFromStats != 0 ? consumedFromStats : consumedFromCalorieApi;
+      _goalKcal = userGoalKcal ?? goalFromCalorieApi;
+      _consumedKcal = consumedFromStats != 0
+          ? consumedFromStats
+          : consumedFromCalorieApi;
 
       _username ??= await _readUserName();
 
@@ -156,10 +154,18 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final e in dm.entries) {
       final kcal = (e.calories ?? 0).toDouble();
       switch (e.meal) {
-        case MealType.breakfast: b += kcal; break;
-        case MealType.lunch:     l += kcal; break;
-        case MealType.snack:     s += kcal; break;
-        case MealType.dinner:    d += kcal; break;
+        case MealType.breakfast:
+          b += kcal;
+          break;
+        case MealType.lunch:
+          l += kcal;
+          break;
+        case MealType.snack:
+          s += kcal;
+          break;
+        case MealType.dinner:
+          d += kcal;
+          break;
       }
     }
     return {'breakfast': b, 'lunch': l, 'snack': s, 'dinner': d};
@@ -170,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final remaining = (_goalKcal - _consumedKcal).clamp(0, 1 << 31);
-    final pct = _goalKcal <= 0 ? 0.0 : (_consumedKcal / _goalKcal).clamp(0.0, 1.0);
+    final pct = _goalKcal <= 0
+        ? 0.0
+        : (_consumedKcal / _goalKcal).clamp(0.0, 1.0);
 
     return Scaffold(
       appBar: AppBar(
@@ -206,183 +214,180 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
 
       // (Sem FAB)
-
       body: RefreshIndicator(
         onRefresh: _load,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? _ErrorView(message: _error!, onRetry: _load)
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-                    children: [
-                      // ===== Só o cumprimento — navegação de dias REMOVIDA =====
-                      Text(
-                        (_username == null || _username!.trim().isEmpty)
-                            ? 'Olá 👋'
-                            : 'Olá, ${_username!.trim()} 👋',
-                        style: tt.titleLarge,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
+            ? _ErrorView(message: _error!, onRetry: _load)
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                children: [
+                  // ===== Só o cumprimento — navegação de dias REMOVIDA =====
+                  Text(
+                    (_username == null || _username!.trim().isEmpty)
+                        ? 'Olá 👋'
+                        : 'Olá, ${_username!.trim()} 👋',
+                    style: tt.titleLarge,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
 
-                      const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                      // ===== Calorias =====
-                      _Card(
-                        child: Row(
+                  // ===== Calorias =====
+                  _Card(
+                    child: Row(
+                      children: [
+                        _CaloriesRing(consumed: _consumedKcal, goal: _goalKcal),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Calorias de hoje', style: tt.titleMedium),
+                              const SizedBox(height: 8),
+                              _kv('Objetivo', '$_goalKcal kcal', tt),
+                              _kv('Consumidas', '$_consumedKcal kcal', tt),
+                              _kv(
+                                'Restantes',
+                                '$remaining kcal',
+                                tt,
+                                emphasize: true,
+                                color: cs.primary,
+                              ),
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: LinearProgressIndicator(
+                                  value: pct,
+                                  minHeight: 8,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // ===== Macros (3 círculos) =====
+                  _Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Macros', style: tt.titleMedium),
+                        const SizedBox(height: 12),
+                        Row(
                           children: [
-                            _CaloriesRing(consumed: _consumedKcal, goal: _goalKcal),
-                            const SizedBox(width: 16),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Calorias de hoje', style: tt.titleMedium),
-                                  const SizedBox(height: 8),
-                                  _kv('Objetivo', '$_goalKcal kcal', tt),
-                                  _kv('Consumidas', '$_consumedKcal kcal', tt),
-                                  _kv('Restantes', '$remaining kcal', tt,
-                                      emphasize: true, color: cs.primary),
-                                  const SizedBox(height: 6),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(999),
-                                    child: LinearProgressIndicator(value: pct, minHeight: 8),
-                                  ),
-                                ],
+                              child: _MacroCircle(
+                                label: 'Proteína',
+                                value: _proteinG.toDouble(),
+                                target: _targetProteinG.toDouble(),
+                                unit: 'g',
+                                color: AppColors.leafyGreen,
+                                onTap: () => context.go('/diary'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _MacroCircle(
+                                label: 'Hidratos',
+                                value: _carbG.toDouble(),
+                                target: _targetCarbG.toDouble(),
+                                unit: 'g',
+                                color: AppColors.warmTangerine,
+                                onTap: () => context.go('/diary'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _MacroCircle(
+                                label: 'Gordura',
+                                value: _fatG.toDouble(),
+                                target: _targetFatG.toDouble(),
+                                unit: 'g',
+                                color: AppColors.goldenAmber,
+                                onTap: () => context.go('/diary'),
                               ),
                             ),
                           ],
                         ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // ===== Macros (3 círculos) =====
-                      _Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Macros', style: tt.titleMedium),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _MacroCircle(
-                                    label: 'Proteína',
-                                    value: _proteinG.toDouble(),
-                                    target: _targetProteinG.toDouble(),
-                                    unit: 'g',
-                                    color: AppColors.leafyGreen,
-                                    onTap: () => context.go('/diary'),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _MacroCircle(
-                                    label: 'Hidratos',
-                                    value: _carbG.toDouble(),
-                                    target: _targetCarbG.toDouble(),
-                                    unit: 'g',
-                                    color: AppColors.warmTangerine,
-                                    onTap: () => context.go('/diary'),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _MacroCircle(
-                                    label: 'Gordura',
-                                    value: _fatG.toDouble(),
-                                    target: _targetFatG.toDouble(),
-                                    unit: 'g',
-                                    color: AppColors.goldenAmber,
-                                    onTap: () => context.go('/diary'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // ===== Refeições =====
-                      _Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Refeições', style: tt.titleMedium),
-                            const SizedBox(height: 12),
-                            _MealRow(
-                              icon: Icons.free_breakfast,
-                              label: 'Pequeno-almoço',
-                              kcal: _kBreakfast,
-                              onTap: () => context.go('/diary'),
-                            ),
-                            const SizedBox(height: 12),
-                            _MealRow(
-                              icon: Icons.lunch_dining,
-                              label: 'Almoço',
-                              kcal: _kLunch,
-                              onTap: () => context.go('/diary'),
-                            ),
-                            const SizedBox(height: 12),
-                            _MealRow(
-                              icon: Icons.cookie_outlined,
-                              label: 'Lanche',
-                              kcal: _kSnack,
-                              onTap: () => context.go('/diary'),
-                            ),
-                            const SizedBox(height: 12),
-                            _MealRow(
-                              icon: Icons.dinner_dining,
-                              label: 'Jantar',
-                              kcal: _kDinner,
-                              onTap: () => context.go('/diary'),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // ===== Saúde & Limites =====
-                      _Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Saúde & Limites', style: tt.titleMedium),
-                            const SizedBox(height: 12),
-                            _LimitMeter(
-                              icon: Icons.cake_outlined,
-                              label: 'Açúcares',
-                              used: _sugarsG.toDouble(),
-                              max: _maxSugarsG.toDouble(),
-                              unit: 'g',
-                            ),
-                            const SizedBox(height: 14),
-                            _LimitMeter(
-                              icon: Icons.opacity_rounded,
-                              label: 'Sal',
-                              used: _saltG.toDouble(),
-                              max: _maxSaltG.toDouble(),
-                              unit: 'g',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+
+                  const SizedBox(height: 16),
+                  // ===== Peso (gráfico) =====
+                  const SizedBox(height: 12),
+                  const WeightTrendCard(
+                    daysBack: 120, // opcional
+                    title: 'Evolução do peso',
+                    showLegend: true,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ===== Refeições =====
+                  _Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Refeições', style: tt.titleMedium),
+                        const SizedBox(height: 12),
+                        _MealRow(
+                          icon: Icons.free_breakfast,
+                          label: 'Pequeno-almoço',
+                          kcal: _kBreakfast,
+                          onTap: () => context.go('/diary'),
+                        ),
+                        const SizedBox(height: 12),
+                        _MealRow(
+                          icon: Icons.lunch_dining,
+                          label: 'Almoço',
+                          kcal: _kLunch,
+                          onTap: () => context.go('/diary'),
+                        ),
+                        const SizedBox(height: 12),
+                        _MealRow(
+                          icon: Icons.cookie_outlined,
+                          label: 'Lanche',
+                          kcal: _kSnack,
+                          onTap: () => context.go('/diary'),
+                        ),
+                        const SizedBox(height: 12),
+                        _MealRow(
+                          icon: Icons.dinner_dining,
+                          label: 'Jantar',
+                          kcal: _kDinner,
+                          onTap: () => context.go('/diary'),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                ],
+              ),
       ),
     );
   }
 
-  Widget _kv(String k, String v, TextTheme tt,
-      {bool emphasize = false, Color? color}) {
+  Widget _kv(
+    String k,
+    String v,
+    TextTheme tt, {
+    bool emphasize = false,
+    Color? color,
+  }) {
     final style = emphasize
         ? tt.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800, color: color, fontFamily: 'RobotoMono')
+            fontWeight: FontWeight.w800,
+            color: color,
+            fontFamily: 'RobotoMono',
+          )
         : tt.bodyMedium;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -408,7 +413,11 @@ class _Card extends StatelessWidget {
         color: cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(blurRadius: 10, offset: Offset(0, 4), color: Color(0x14000000)),
+          BoxShadow(
+            blurRadius: 10,
+            offset: Offset(0, 4),
+            color: Color(0x14000000),
+          ),
         ],
       ),
       padding: const EdgeInsets.all(16),
@@ -447,9 +456,13 @@ class _CaloriesRing extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${(pct * 100).round()}%',
-                  style: tt.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800, fontFamily: 'RobotoMono')),
+              Text(
+                '${(pct * 100).round()}%',
+                style: tt.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'RobotoMono',
+                ),
+              ),
               const SizedBox(height: 2),
               Text('kcal', style: tt.labelSmall),
             ],
@@ -463,8 +476,8 @@ class _CaloriesRing extends StatelessWidget {
 // ===== Macros em círculos =====
 class _MacroCircle extends StatelessWidget {
   final String label;
-  final double value;   // consumido em g
-  final double target;  // alvo em g
+  final double value; // consumido em g
+  final double target; // alvo em g
   final String unit;
   final Color color;
   final VoidCallback? onTap;
@@ -499,7 +512,9 @@ class _MacroCircle extends StatelessWidget {
               value: 1,
               strokeWidth: 12,
               strokeCap: StrokeCap.round,
-              valueColor: AlwaysStoppedAnimation<Color>(cs.surfaceContainerHighest),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                cs.surfaceContainerHighest,
+              ),
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -517,13 +532,15 @@ class _MacroCircle extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${value.toStringAsFixed(0)} $unit',
-                  style: tt.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800, fontFamily: 'RobotoMono')),
               Text(
-                hasTarget
-                    ? 'Alvo ${target.toStringAsFixed(0)}'
-                    : 'sem alvo',
+                '${value.toStringAsFixed(0)} $unit',
+                style: tt.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'RobotoMono',
+                ),
+              ),
+              Text(
+                hasTarget ? 'Alvo ${target.toStringAsFixed(0)}' : 'sem alvo',
                 style: tt.labelSmall,
               ),
             ],
@@ -536,7 +553,11 @@ class _MacroCircle extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (onTap != null)
-          InkWell(borderRadius: BorderRadius.circular(60), onTap: onTap, child: circle)
+          InkWell(
+            borderRadius: BorderRadius.circular(60),
+            onTap: onTap,
+            child: circle,
+          )
         else
           circle,
         const SizedBox(height: 8),
@@ -551,13 +572,20 @@ class _MealRow extends StatelessWidget {
   final String label;
   final double kcal;
   final VoidCallback? onTap;
-  const _MealRow({required this.icon, required this.label, required this.kcal, this.onTap});
+  const _MealRow({
+    required this.icon,
+    required this.label,
+    required this.kcal,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final barPct = kcal <= 0 ? 0.0 : (kcal / 800).clamp(0.0, 1.0); // escala visual
+    final barPct = kcal <= 0
+        ? 0.0
+        : (kcal / 800).clamp(0.0, 1.0); // escala visual
 
     final row = Row(
       children: [
@@ -582,8 +610,10 @@ class _MealRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Text('${kcal.round()} kcal',
-            style: tt.titleSmall?.copyWith(fontFamily: 'RobotoMono')),
+        Text(
+          '${kcal.round()} kcal',
+          style: tt.titleSmall?.copyWith(fontFamily: 'RobotoMono'),
+        ),
       ],
     );
 
@@ -668,7 +698,7 @@ class _LimitMeter extends StatelessWidget {
                             color: Color(0x22000000),
                             blurRadius: 3,
                             offset: Offset(0, 1),
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -681,14 +711,21 @@ class _LimitMeter extends StatelessWidget {
                 runSpacing: 4,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  _chip('${used.toStringAsFixed(0)} $unit', cs.surfaceContainerHigh),
                   _chip(
-                    hasMax ? 'máx: ${max.toStringAsFixed(0)} $unit' : 'sem limite definido',
+                    '${used.toStringAsFixed(0)} $unit',
+                    cs.surfaceContainerHigh,
+                  ),
+                  _chip(
+                    hasMax
+                        ? 'máx: ${max.toStringAsFixed(0)} $unit'
+                        : 'sem limite definido',
                     const Color(0xFFE8F5E9), // Light Sage
                   ),
                   if (hasMax)
-                    Text('${(pct * 100).round()}%',
-                        style: tt.labelSmall?.copyWith(fontFamily: 'RobotoMono')),
+                    Text(
+                      '${(pct * 100).round()}%',
+                      style: tt.labelSmall?.copyWith(fontFamily: 'RobotoMono'),
+                    ),
                 ],
               ),
             ],
@@ -701,7 +738,10 @@ class _LimitMeter extends StatelessWidget {
   Widget _chip(String text, Color bg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Text(text, style: const TextStyle(fontSize: 12)),
     );
   }
@@ -724,7 +764,10 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: onRetry, child: const Text('Tentar novamente')),
+            ElevatedButton(
+              onPressed: onRetry,
+              child: const Text('Tentar novamente'),
+            ),
           ],
         ),
       ),
