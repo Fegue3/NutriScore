@@ -184,7 +184,7 @@ class _WeightProgressScreenState extends State<WeightProgressScreen> {
               Text(
                 'Dica: toca e arrasta no gráfico para ver valores por dia.',
                 style: TextStyle(
-                  color: cs.onSurface.withOpacity(.6),
+                  color: cs.onSurface.withValues(alpha: .6),
                   fontSize: 12,
                 ),
               ),
@@ -222,7 +222,7 @@ class _RangeChips extends StatelessWidget {
             side: BorderSide(
               color: selected
                   ? AppColors.freshGreen
-                  : Colors.black.withOpacity(.08),
+                  : Colors.black.withValues(alpha: .08),
             ),
           ),
           onSelected: (_) => onChanged(r),
@@ -253,7 +253,7 @@ class _ChartCard extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outline.withOpacity(.12)),
+        side: BorderSide(color: cs.outline.withValues(alpha: .12)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -266,7 +266,7 @@ class _ChartCard extends StatelessWidget {
                   child: Text(
                     error!,
                     style: TextStyle(
-                      color: cs.onSurface.withOpacity(.7),
+                      color: cs.onSurface.withValues(alpha: .7),
                       fontSize: 13,
                     ),
                   ),
@@ -276,7 +276,7 @@ class _ChartCard extends StatelessWidget {
                         child: Text(
                           'Sem registos ainda',
                           style: TextStyle(
-                            color: cs.onSurface.withOpacity(.7),
+                            color: cs.onSurface.withValues(alpha: .7),
                             fontSize: 13,
                           ),
                         ),
@@ -314,7 +314,7 @@ class _LineChart extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) =>
-              FlLine(color: cs.outline.withOpacity(.18), strokeWidth: 1),
+              FlLine(color: cs.outline.withValues(alpha: .18), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(
@@ -330,7 +330,7 @@ class _LineChart extends StatelessWidget {
               getTitlesWidget: (v, _) => Text(
                 v.toStringAsFixed(1),
                 style: TextStyle(
-                  color: cs.onSurface.withOpacity(.72),
+                  color: cs.onSurface.withValues(alpha: .72),
                   fontSize: 10,
                 ),
               ),
@@ -352,7 +352,7 @@ class _LineChart extends StatelessWidget {
                   child: Text(
                     label,
                     style: TextStyle(
-                      color: cs.onSurface.withOpacity(.72),
+                      color: cs.onSurface.withValues(alpha: .72),
                       fontSize: 10,
                     ),
                   ),
@@ -405,8 +405,8 @@ class _LineChart extends StatelessWidget {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  AppColors.freshGreen.withOpacity(.25),
-                  AppColors.freshGreen.withOpacity(.05),
+                  AppColors.freshGreen.withValues(alpha: .25),
+                  AppColors.freshGreen.withValues(alpha: .05),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
