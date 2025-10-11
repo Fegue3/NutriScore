@@ -13,6 +13,7 @@ import '../../features/nutrition/nutrition_screen.dart';
 import '../../features/nutrition/add_food_screen.dart';
 import '../../features/nutrition/product_detail_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/settings/edit_user_screen.dart';
 import '../../features/nutrition/nutrition_stats_screen.dart';
 
 import '../app_shell.dart';
@@ -92,7 +93,10 @@ GoRouter buildAppRouter(AuthRepository repo) {
           );
         },
       ),
-
+      GoRoute(
+        path: '/settings/user',
+        pageBuilder: (_, __) => const NoTransitionPage(child: EditUserScreen()),
+      ),
       // Detalhe do produto (suporta extra e query; inclui readOnly e freezeFromEntry)
       GoRoute(
         name: 'productDetail',
